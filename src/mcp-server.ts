@@ -18,6 +18,7 @@ const sgToken = process.env.SOURCEGRAPH_TOKEN;
  * with resources, prompts, and tools
  */
 export function createServer() {
+  const toolImplementations: Record<string, Function> = {};
   // Create an MCP server
   const server = new McpServer({
     name: "sourcegraph-mcp-server",
@@ -67,6 +68,17 @@ export function createServer() {
   );
 
   // Add an echo tool
+  // Just use direct implementation in the tool
+  toolImplementations["echo"] = async (args: { message: string }) => {
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Hello ${args.message}`,
+        },
+      ],
+    };
+  };
   server.tool(
     "echo",
     "Echoes back a message with 'Hello' prefix",
@@ -469,6 +481,140 @@ export function createServer() {
     }
   );
 
+  // Add a tool to search specifically in GitHub repositories
+  server.tool(
+    "search-github-repos",
+    "Search for code in specific GitHub repositories",
+    { 
+      query: z.string().describe("Search query text"),
+      repos: z.string().describe("Comma-separated list of GitHub repositories to search in (e.g., 'owner/repo1,owner/repo2')"),
+      type: z.enum(['file', 'commit', 'diff']).default('file').describe("Type of search: file, commit, or diff")
+    },
+    async ({ query, repos, type }) => {
+      // Validate Sourcegraph credentials
+      const effectiveUrl = sgUrl || process.env.SOURCEGRAPH_URL;
+      const effectiveToken = sgToken || process.env.SOURCEGRAPH_TOKEN;
+      
+      if (!effectiveUrl || !effectiveToken) {
+        return {
+          content: [{ 
+            type: "text", 
+            text: "Error: Sourcegraph URL or token not configured. Please set SOURCEGRAPH_URL and SOURCEGRAPH_TOKEN environment variables." 
+          }],
+          isError: true
+        };
+      }
+
+      try {
+        // Parse the repo list
+        const repoList = repos.split(',').map(r => r.trim());
+        
+        // Build the search query with repo filters
+        const repoFilters = repoList.map(repo => `repo:^github\\.com/${repo}$`).join(' '); 
+        const searchQuery = `${query} ${repoFilters} type:${type} count:20`;
+        
+        // The GraphQL query
+        const graphqlQuery = `
+          query GitHubRepoSearch($query: String!) {
+            search(query: $query, version: V3) {
+              results {
+                matchCount
+                results {
+                  __typename
+                  ... on FileMatch {
+                    repository { name }
+                    file { path }
+                    lineMatches {
+                      lineNumber
+                      preview
+                    }
+                  }
+                  ... on CommitSearchResult {
+                    commit {
+                      oid
+                      message
+                      author {
+                        person {
+                          name
+                          email
+                        }
+                        date
+                      }
+                      repository { name }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        `;
+        
+        // Headers for Sourcegraph API
+        const headers = {
+          'Authorization': `token ${effectiveToken}`,
+          'Content-Type': 'application/json'
+        };
+        
+        // Make the request to Sourcegraph API
+        const response = await axios.post(
+          `${effectiveUrl}/.api/graphql`,
+          { query: graphqlQuery, variables: { query: searchQuery } },
+          { headers }
+        );
+        
+        if (response.data.errors) {
+          return {
+            content: [{ 
+              type: "text", 
+              text: `Sourcegraph API Error: ${JSON.stringify(response.data.errors)}` 
+            }],
+            isError: true
+          };
+        }
+        
+        // Format the results
+        const results = response.data.data.search.results;
+        const matchCount = results.matchCount;
+        const items = results.results;
+        
+        // Create a formatted result
+        const formattedItems = items.map((item: any) => {
+          if (item.__typename === 'FileMatch') {
+            const repo = item.repository.name;
+            const filePath = item.file.path;
+            const matches = item.lineMatches.map((match: { lineNumber: number; preview: string }) => 
+              `Line ${match.lineNumber}: ${match.preview}`
+            ).join('\n');
+            
+            return `Repository: ${repo}\nFile: ${filePath}\n${matches}\n`;
+          } else if (item.__typename === 'CommitSearchResult') {
+            const commit = item.commit;
+            const repo = commit.repository.name;
+            
+            return `Repository: ${repo}\nCommit: ${commit.oid.substring(0, 7)}\nAuthor: ${commit.author.person.name}\nDate: ${commit.author.date}\nMessage: ${commit.message}`;
+          }
+          return null;
+        }).filter(Boolean).join('\n---\n');
+        
+        return {
+          content: [{ 
+            type: "text", 
+            text: `Found ${matchCount} matches for "${query}" in specific GitHub repos with type:${type}\n\n${formattedItems}` 
+          }]
+        };
+        
+      } catch (error: any) {
+        return {
+          content: [{ 
+            type: "text", 
+            text: `Error searching GitHub repositories: ${error.message || 'Unknown error'}` 
+          }],
+          isError: true
+        };
+      }
+    }
+  );
+
   // Add a debug tool to list available tools and methods
   server.tool(
     "debug",
@@ -483,7 +629,8 @@ export function createServer() {
               "echo", 
               "search-code", 
               "search-commits", 
-              "search-diffs", 
+              "search-diffs",
+              "search-github-repos", 
               "debug"
             ],
             resources: [
@@ -499,6 +646,14 @@ export function createServer() {
       ],
     })
   );
+
+  // Add invoke method to the server for direct tool invocation
+  (server as any).invoke = async (toolName: string, params: any) => {
+    if (toolName in toolImplementations) {
+      return await toolImplementations[toolName](params);
+    }
+    throw new Error(`Tool '${toolName}' not found`);
+  };
 
   return server;
 }
