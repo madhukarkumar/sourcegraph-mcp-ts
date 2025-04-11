@@ -1,0 +1,21 @@
+{
+  "name": "sourcegraph-search-server",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "start:mcp": "node dist/http-server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.9.0",
+    "axios": "^1.3.0",
+    "dotenv": "^16.0.0",
+    "express": "^4.18.2",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.14",
+    "@types/node": "^18.0.0",
+    "typescript": "^4.9.0"
+  }
+}
