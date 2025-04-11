@@ -173,6 +173,28 @@ The MCP server can also be configured to run as a local process with STDIO commu
      - SOURCEGRAPH_TOKEN: `your_api_token`
 5. Click "Add"
 
+##### Configuration in Claude Desktop JSON config
+
+If you prefer to edit Claude Desktop's configuration file directly, add this to your config (with your actual Sourcegraph URL and token):
+
+```json
+{
+  "mcpServers": {
+    "sourcegraph": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "sourcegraph-mcp-server"
+      ],
+      "env": {
+        "SOURCEGRAPH_URL": "https://your-instance.sourcegraph.com",
+        "SOURCEGRAPH_TOKEN": "your_api_token"
+      }
+    }
+  }
+}
+```
+
 Alternatively, if you've cloned the repository locally, you can configure it like this:
 1. Build the project: `npm run build`
 2. Configure Claude Desktop to use your local build:
