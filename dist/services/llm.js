@@ -119,13 +119,17 @@ Guidelines:
 - For code searches, use type:file or add specific language filters with lang:
 - For commit searches, use type:commit and add author: or after: if specified
 - For diff searches, use type:diff and add appropriate filters
+- Never wrap the entire query in quotes
+- Include count:20 for reasonable result limiting
+- Add lang: filters when language context is provided or implied
+- Remove trailing spaces from the query
 
 Examples:
-- "Find authentication code in the frontend" → "authentication frontend type:file"
-- "Show commits by Jane from last week" → "author:Jane after:"1 week ago" type:commit"
-- "Files using supabase for authentication" → "supabase authentication type:file"
-- "Show all Java files with SQL queries" → "lang:java SQL type:file"
-- "Find changes to the API in March" → "api after:2023-03-01 before:2023-04-01 type:diff"
+- "Find authentication code in the frontend" → "authentication frontend type:file count:20"
+- "Show commits by Jane from last week" → "author:Jane after:"1 week ago" type:commit count:20"
+- "Files using supabase for authentication" → "supabase authentication type:file count:20"
+- "Show all Java files with SQL queries" → "lang:java SQL type:file count:20"
+- "Find changes to the API in March" → "api after:2023-03-01 before:2023-04-01 type:diff count:20"
 
 Natural language query: ${naturalQuery}
 
@@ -147,13 +151,17 @@ Guidelines:
 - For code searches, use type:file or add specific language filters with lang:
 - For commit searches, use type:commit and add author: or after: if specified
 - For diff searches, use type:diff and add appropriate filters
+- Never wrap the entire query in quotes
+- Include count:20 for reasonable result limiting
+- Add lang: filters when language context is provided or implied
+- Remove trailing spaces from the query
 
 Examples:
-- "Find authentication code in the frontend" → "authentication frontend type:file"
-- "Show commits by Jane from last week" → "author:Jane after:"1 week ago" type:commit"
-- "Files using supabase for authentication" → "supabase authentication type:file"
-- "Show all Java files with SQL queries" → "lang:java SQL type:file"
-- "Find changes to the API in March" → "api after:2023-03-01 before:2023-04-01 type:diff"
+- "Find authentication code in the frontend" → "authentication frontend type:file count:20"
+- "Show commits by Jane from last week" → "author:Jane after:"1 week ago" type:commit count:20"
+- "Files using supabase for authentication" → "supabase authentication type:file count:20"
+- "Show all Java files with SQL queries" → "lang:java SQL type:file count:20"
+- "Find changes to the API in March" → "api after:2023-03-01 before:2023-04-01 type:diff count:20"
 
 Natural language query: ${naturalQuery}
 

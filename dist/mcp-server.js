@@ -9,6 +9,7 @@ const zod_1 = require("zod");
 const dotenv_1 = __importDefault(require("dotenv"));
 const axios_1 = __importDefault(require("axios"));
 const natural_language_1 = require("./services/natural-language");
+const formatter_1 = require("./utils/formatter");
 // Load environment variables
 dotenv_1.default.config();
 // Sourcegraph API configuration
@@ -77,7 +78,7 @@ function createServer() {
             },
         ],
     }));
-    // Add code search tool
+    // Add code search tool - now with natural language processing support
     server.tool("search-code", "Search for code across Sourcegraph repositories", {
         query: zod_1.z.string().describe("Search query text"),
         type: zod_1.z.enum(['file', 'commit', 'diff']).default('file').describe("Type of search: file, commit, or diff")
@@ -95,8 +96,31 @@ function createServer() {
             };
         }
         try {
-            // Build the search query
-            const searchQuery = `${query} type:${type} count:20`;
+            // Check if the query seems to be natural language
+            // If it contains common phrases like "find" or doesn't have specific operators
+            const looksLikeNaturalLanguage = /^(find|show|get|search for|look for|what|where|how|when)/i.test(query) ||
+                !/(repo:|type:|lang:|after:|content:|file:|case:|patterntype:)/i.test(query);
+            let finalQuery;
+            if (looksLikeNaturalLanguage) {
+                // Process through natural language query analyzer
+                try {
+                    // Use the analyzeQuery function to get a more precise query
+                    const analyzed = await (0, formatter_1.analyzeQuery)(query);
+                    // Use the suggested type if provided in parameters
+                    const finalType = type || analyzed.type;
+                    finalQuery = `${analyzed.query} type:${finalType} count:20`;
+                }
+                catch (nlError) {
+                    console.error('Natural language processing failed, using original query:', nlError);
+                    finalQuery = `${query} type:${type} count:20`;
+                }
+            }
+            else {
+                // Direct Sourcegraph syntax - just add type if not already present
+                finalQuery = query.includes('type:') ? query : `${query} type:${type}`;
+                // Add count if not present
+                finalQuery = finalQuery.includes('count:') ? finalQuery : `${finalQuery} count:20`;
+            }
             // The GraphQL query
             const graphqlQuery = `
           query CodeSearch($query: String!) {
@@ -138,7 +162,7 @@ function createServer() {
                 'Content-Type': 'application/json'
             };
             // Make the request to Sourcegraph API
-            const response = await axios_1.default.post(`${effectiveUrl}/.api/graphql`, { query: graphqlQuery, variables: { query: searchQuery } }, { headers });
+            const response = await axios_1.default.post(`${effectiveUrl}/.api/graphql`, { query: graphqlQuery, variables: { query: finalQuery } }, { headers });
             if (response.data.errors) {
                 return {
                     content: [{
@@ -150,27 +174,12 @@ function createServer() {
             }
             // Format the results
             const results = response.data.data.search.results;
-            const matchCount = results.matchCount;
-            const items = results.results;
-            // Create a formatted result
-            const formattedItems = items.map((item) => {
-                if (item.__typename === 'FileMatch') {
-                    const repo = item.repository.name;
-                    const filePath = item.file.path;
-                    const matches = item.lineMatches.map((match) => `Line ${match.lineNumber}: ${match.preview}`).join('\n');
-                    return `Repository: ${repo}\nFile: ${filePath}\n${matches}\n`;
-                }
-                else if (item.__typename === 'CommitSearchResult') {
-                    const commit = item.commit;
-                    const repo = commit.repository.name;
-                    return `Repository: ${repo}\nCommit: ${commit.oid.substring(0, 7)}\nAuthor: ${commit.author.person.name}\nDate: ${commit.author.date}\nMessage: ${commit.message}`;
-                }
-                return null;
-            }).filter(Boolean).join('\n---\n');
+            // Use the enhanced formatter for results
+            const formattedResults = (0, formatter_1.formatSearchResults)(results, { query: finalQuery, type });
             return {
                 content: [{
                         type: "text",
-                        text: `Found ${matchCount} matches for "${query}" with type:${type}\n\n${formattedItems}`
+                        text: formattedResults
                     }]
             };
         }
@@ -203,15 +212,52 @@ function createServer() {
             };
         }
         try {
-            // Build the search query
-            let searchQuery = 'type:commit';
-            if (author)
-                searchQuery += ` author:${author}`;
-            if (message)
-                searchQuery += ` message:${message}`;
-            if (after)
-                searchQuery += ` after:${after}`;
-            searchQuery += ' count:20';
+            // Check if the message parameter might be a natural language query
+            let finalQuery;
+            let nlQuery = message;
+            // Only attempt NL processing if message looks like natural language
+            if (nlQuery && /^(find|show|get|search for|look for|what|where|how|when)/i.test(nlQuery)) {
+                try {
+                    // Use the analyzeQuery function to get a more precise query
+                    const analyzed = await (0, formatter_1.analyzeQuery)(nlQuery);
+                    // Build the final query using the analyzed components and any explicit parameters
+                    finalQuery = 'type:commit';
+                    // Add search terms from analysis
+                    if (analyzed.query)
+                        finalQuery += ` ${analyzed.query}`;
+                    // Use explicitly provided parameters if available, otherwise use analyzed ones
+                    const finalAuthor = author || analyzed.author;
+                    const finalAfter = after || analyzed.after;
+                    if (finalAuthor)
+                        finalQuery += ` author:${finalAuthor}`;
+                    if (finalAfter)
+                        finalQuery += ` after:${finalAfter}`;
+                    finalQuery += ' count:20';
+                }
+                catch (nlError) {
+                    console.error('Natural language processing failed, using original parameters:', nlError);
+                    // Fall back to standard query building
+                    finalQuery = 'type:commit';
+                    if (author)
+                        finalQuery += ` author:${author}`;
+                    if (message)
+                        finalQuery += ` message:${message}`;
+                    if (after)
+                        finalQuery += ` after:${after}`;
+                    finalQuery += ' count:20';
+                }
+            }
+            else {
+                // Build the search query using provided parameters directly
+                finalQuery = 'type:commit';
+                if (author)
+                    finalQuery += ` author:${author}`;
+                if (message)
+                    finalQuery += ` message:${message}`;
+                if (after)
+                    finalQuery += ` after:${after}`;
+                finalQuery += ' count:20';
+            }
             // The GraphQL query
             const graphqlQuery = `
           query CommitSearch($query: String!) {
@@ -245,7 +291,7 @@ function createServer() {
                 'Content-Type': 'application/json'
             };
             // Make the request to Sourcegraph API
-            const response = await axios_1.default.post(`${effectiveUrl}/.api/graphql`, { query: graphqlQuery, variables: { query: searchQuery } }, { headers });
+            const response = await axios_1.default.post(`${effectiveUrl}/.api/graphql`, { query: graphqlQuery, variables: { query: finalQuery } }, { headers });
             if (response.data.errors) {
                 return {
                     content: [{
@@ -255,23 +301,13 @@ function createServer() {
                     isError: true
                 };
             }
-            // Format the results
+            // Format the results using the enhanced formatter
             const results = response.data.data.search.results;
-            const matchCount = results.matchCount;
-            const items = results.results;
-            // Create a formatted result
-            const formattedItems = items
-                .filter((item) => item.__typename === 'CommitSearchResult')
-                .map((item) => {
-                const commit = item.commit;
-                const repo = commit.repository.name;
-                return `Repository: ${repo}\nCommit: ${commit.oid.substring(0, 7)}\nAuthor: ${commit.author.person.name} <${commit.author.person.email}>\nDate: ${commit.author.date}\nMessage: ${commit.message}`;
-            })
-                .join('\n---\n');
+            const formattedResults = (0, formatter_1.formatSearchResults)(results, { query: finalQuery, type: 'commit' });
             return {
                 content: [{
                         type: "text",
-                        text: `Found ${matchCount} commits matching the criteria\n\n${formattedItems}`
+                        text: formattedResults
                     }]
             };
         }
@@ -304,15 +340,48 @@ function createServer() {
             };
         }
         try {
-            // Build the search query
-            let searchQuery = 'type:diff';
-            if (query)
-                searchQuery += ` ${query}`;
-            if (author)
-                searchQuery += ` author:${author}`;
-            if (after)
-                searchQuery += ` after:${after}`;
-            searchQuery += ' count:20';
+            // Check if the query looks like natural language
+            let finalQuery;
+            if (query && /^(find|show|get|search for|look for|what|where|how|when)/i.test(query)) {
+                // Process through natural language query analyzer
+                try {
+                    // Use the analyzeQuery function to get a more precise query
+                    const analyzed = await (0, formatter_1.analyzeQuery)(query);
+                    finalQuery = analyzed.query;
+                    // Use explicitly provided parameters if available
+                    const finalAuthor = author || analyzed.author;
+                    const finalAfter = after || analyzed.after;
+                    finalQuery = `type:diff ${finalQuery}`;
+                    if (finalAuthor)
+                        finalQuery += ` author:${finalAuthor}`;
+                    if (finalAfter)
+                        finalQuery += ` after:${finalAfter}`;
+                    finalQuery += ' count:20';
+                }
+                catch (nlError) {
+                    console.error('Natural language processing failed, using original query:', nlError);
+                    // Fall back to standard query building
+                    finalQuery = 'type:diff';
+                    if (query)
+                        finalQuery += ` ${query}`;
+                    if (author)
+                        finalQuery += ` author:${author}`;
+                    if (after)
+                        finalQuery += ` after:${after}`;
+                    finalQuery += ' count:20';
+                }
+            }
+            else {
+                // Build the search query with provided parameters
+                finalQuery = 'type:diff';
+                if (query)
+                    finalQuery += ` ${query}`;
+                if (author)
+                    finalQuery += ` author:${author}`;
+                if (after)
+                    finalQuery += ` after:${after}`;
+                finalQuery += ' count:20';
+            }
             // The GraphQL query
             const graphqlQuery = `
           query DiffSearch($query: String!) {
@@ -357,7 +426,7 @@ function createServer() {
                 'Content-Type': 'application/json'
             };
             // Make the request to Sourcegraph API
-            const response = await axios_1.default.post(`${effectiveUrl}/.api/graphql`, { query: graphqlQuery, variables: { query: searchQuery } }, { headers });
+            const response = await axios_1.default.post(`${effectiveUrl}/.api/graphql`, { query: graphqlQuery, variables: { query: finalQuery } }, { headers });
             if (response.data.errors) {
                 return {
                     content: [{
@@ -367,34 +436,13 @@ function createServer() {
                     isError: true
                 };
             }
-            // Format the results
+            // Format the results using the enhanced formatter
             const results = response.data.data.search.results;
-            const matchCount = results.matchCount;
-            const items = results.results;
-            // Create a formatted result
-            const formattedItems = items
-                .filter((item) => item.__typename === 'CommitSearchResult' && item.diff)
-                .map((item) => {
-                const commit = item.commit;
-                const repo = commit.repository.name;
-                const commitInfo = `Commit: ${commit.oid.substring(0, 7)}\nAuthor: ${commit.author.person.name}\nDate: ${commit.author.date}\nMessage: ${commit.message}\n`;
-                let diffInfo = '';
-                if (item.diff && item.diff.fileDiffs) {
-                    diffInfo = item.diff.fileDiffs.map((fileDiff) => {
-                        const pathInfo = `${fileDiff.oldPath || ''} → ${fileDiff.newPath || ''}`;
-                        const hunksInfo = fileDiff.hunks ? fileDiff.hunks.map((hunk) => {
-                            return `@@ -${hunk.oldRange.start},${hunk.oldRange.lines} +${hunk.newRange.start},${hunk.newRange.lines} @@\n${hunk.body}`;
-                        }).join('\n') : 'No diff hunks available';
-                        return `File: ${pathInfo}\n${hunksInfo}`;
-                    }).join('\n\n');
-                }
-                return `Repository: ${repo}\n${commitInfo}\nDiff:\n${diffInfo}`;
-            })
-                .join('\n---\n');
+            const formattedResults = (0, formatter_1.formatSearchResults)(results, { query: finalQuery, type: 'diff' });
             return {
                 content: [{
                         type: "text",
-                        text: `Found ${matchCount} diffs matching the criteria\n\n${formattedItems}`
+                        text: formattedResults
                     }]
             };
         }
@@ -431,7 +479,21 @@ function createServer() {
             const repoList = repos.split(',').map(r => r.trim());
             // Build the search query with repo filters
             const repoFilters = repoList.map(repo => `repo:^github\\.com/${repo}$`).join(' ');
-            const searchQuery = `${query} ${repoFilters} type:${type} count:20`;
+            // Check if the query is natural language
+            let searchTerms = query;
+            const isNaturalLanguage = /^(find|show|get|search for|look for|what|where|how|when)/i.test(query);
+            if (isNaturalLanguage) {
+                try {
+                    // Process through natural language query analyzer
+                    const analyzed = await (0, formatter_1.analyzeQuery)(query);
+                    searchTerms = analyzed.query;
+                }
+                catch (nlError) {
+                    console.error('Natural language processing failed, using original query:', nlError);
+                }
+            }
+            // Build the final search query
+            const finalQuery = `${searchTerms} ${repoFilters} type:${type} count:20`;
             // The GraphQL query
             const graphqlQuery = `
           query GitHubRepoSearch($query: String!) {
@@ -473,7 +535,7 @@ function createServer() {
                 'Content-Type': 'application/json'
             };
             // Make the request to Sourcegraph API
-            const response = await axios_1.default.post(`${effectiveUrl}/.api/graphql`, { query: graphqlQuery, variables: { query: searchQuery } }, { headers });
+            const response = await axios_1.default.post(`${effectiveUrl}/.api/graphql`, { query: graphqlQuery, variables: { query: finalQuery } }, { headers });
             if (response.data.errors) {
                 return {
                     content: [{
@@ -483,29 +545,13 @@ function createServer() {
                     isError: true
                 };
             }
-            // Format the results
+            // Format the results using the enhanced formatter
             const results = response.data.data.search.results;
-            const matchCount = results.matchCount;
-            const items = results.results;
-            // Create a formatted result
-            const formattedItems = items.map((item) => {
-                if (item.__typename === 'FileMatch') {
-                    const repo = item.repository.name;
-                    const filePath = item.file.path;
-                    const matches = item.lineMatches.map((match) => `Line ${match.lineNumber}: ${match.preview}`).join('\n');
-                    return `Repository: ${repo}\nFile: ${filePath}\n${matches}\n`;
-                }
-                else if (item.__typename === 'CommitSearchResult') {
-                    const commit = item.commit;
-                    const repo = commit.repository.name;
-                    return `Repository: ${repo}\nCommit: ${commit.oid.substring(0, 7)}\nAuthor: ${commit.author.person.name}\nDate: ${commit.author.date}\nMessage: ${commit.message}`;
-                }
-                return null;
-            }).filter(Boolean).join('\n---\n');
+            const formattedResults = (0, formatter_1.formatSearchResults)(results, { query: finalQuery, type });
             return {
                 content: [{
                         type: "text",
-                        text: `Found ${matchCount} matches for "${query}" in specific GitHub repos with type:${type}\n\n${formattedItems}`
+                        text: formattedResults
                     }]
             };
         }

@@ -7,7 +7,8 @@
     "start:mcp": "node dist/http-server.js",
     "start:stdio": "node dist/stdio-server.js",
     "start:dev": "ts-node src/http-server.ts",
-    "create-debug-server": "node scripts/debug-server.js"
+    "debug-server": "node scripts/debug-server.js",
+    "test-search": "node scripts/test-search.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.9.0",

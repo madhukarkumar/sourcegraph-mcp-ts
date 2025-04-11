@@ -6,11 +6,12 @@ A Model Context Protocol (MCP) server that allows AI assistants to search code r
 
 ## Key Features
 
-- **Natural Language Code Search**: Search using plain English queries
+- **Natural Language Code Search**: Search using plain English queries with LLM-powered translation
 - **Code Search**: Search for code across Sourcegraph repositories
 - **Commit Search**: Find commits with various filters
 - **Diff Search**: Find code changes/PRs
 - **GitHub-specific Search**: Search in specific GitHub repositories
+- **LLM-Powered Query Translation**: Uses OpenAI or Anthropic to translate natural language to Sourcegraph syntax
 
 ## How to Search with Natural Language
 
@@ -31,7 +32,7 @@ You can search code using plain English in several ways:
 
 ### Using the Debug Server (for testing)
 
-1. Start the debug server: `node scripts/debug-server.js`
+1. Start the debug server: `npm run debug-server`
 2. Connect MCP Inspector to http://localhost:3003
 3. Try the `test-nl-search` tool with a natural language query
 
@@ -74,6 +75,13 @@ SOURCEGRAPH_URL=https://your-sourcegraph-instance.com
 SOURCEGRAPH_TOKEN=your_api_token
 PORT=3001
 MCP_PORT=3002
+
+# LLM configuration for natural language processing
+LLM_PROVIDER=openai       # Can be 'openai' or 'anthropic'
+OPENAI_API_KEY=your_openai_api_key
+OPENAI_MODEL=gpt-4o      # Default model to use, gpt-3.5-turbo also works
+# ANTHROPIC_API_KEY=your_anthropic_key  # For using Claude instead
+# ANTHROPIC_MODEL=claude-2   # Default Anthropic model
 ```
 
 ## Running the Server
@@ -86,14 +94,17 @@ npm start
 npm run start:mcp
 
 # Start the debug server (for MCP protocol testing)
-node scripts/debug-server.js
+npm run debug-server
+
+# Test natural language search functionality
+npm run test-search "find authentication code in React components"
 ```
 
 ## Testing with MCP Inspector
 
 To test the server using the [MCP Inspector](https://github.com/anthropics/mcp-inspector/):
 
-1. First, start the debug server: `node scripts/debug-server.js`
+1. First, start the debug server: `npm run debug-server`
 2. Open the MCP Inspector and connect to: `http://localhost:3003`
 3. Try the tools in this order:
 
