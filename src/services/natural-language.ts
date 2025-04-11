@@ -27,15 +27,19 @@ export async function naturalLanguageSearch(naturalQuery: string, sourcegraphCon
   token: string;
 }): Promise<McpToolResponse> {
   try {
-    // Extract structured query parameters from natural language
+    // Extract structured query parameters from natural language using LLM
     const {
       type = 'file',
       query,
       author,
       after,
-      repos = []
-    } = analyzeQuery(naturalQuery);
+      repos = [],
+      originalQuery
+    } = await analyzeQuery(naturalQuery);
 
+    // For clarity in logs, show the transformation
+    console.log(`Natural query: "${naturalQuery}" → Sourcegraph: "${query}" (type: ${type})`);
+    
     // Base search query
     let searchQuery = query;
     

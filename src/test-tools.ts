@@ -25,27 +25,30 @@ export function addTestTools(server: McpServer) {
         // Process silently without console logs that break the JSON response
         
         // Step 1: Analyze the query to determine search type and parameters
-        const queryAnalysis = analyzeQuery(query);
+        // NOTE: Now this is an async function that uses LLM
+        const queryAnalysis = await analyzeQuery(query);
         
         // Step 2: Build the Sourcegraph search query
         let searchQuery = queryAnalysis.query;
         
-        // Add type filter
-        searchQuery += ` type:${queryAnalysis.type}`;
+        // Add type filter if not already present
+        if (!searchQuery.includes('type:')) {
+          searchQuery += ` type:${queryAnalysis.type}`;
+        }
         
-        // Add author filter for commit and diff searches
-        if (queryAnalysis.author && (queryAnalysis.type === 'commit' || queryAnalysis.type === 'diff')) {
+        // Add author filter for commit and diff searches if not already present
+        if (queryAnalysis.author && (queryAnalysis.type === 'commit' || queryAnalysis.type === 'diff') && !searchQuery.includes('author:')) {
           searchQuery += ` author:${queryAnalysis.author}`;
         }
         
-        // Add date filter
-        if (queryAnalysis.after && (queryAnalysis.type === 'commit' || queryAnalysis.type === 'diff')) {
+        // Add date filter if not already present
+        if (queryAnalysis.after && (queryAnalysis.type === 'commit' || queryAnalysis.type === 'diff') && !searchQuery.includes('after:')) {
           searchQuery += ` after:${queryAnalysis.after}`;
         }
         
-        // Add repository filters
-        if (queryAnalysis.repos.length > 0) {
-          const repoFilters = queryAnalysis.repos.map(repo => {
+        // Add repository filters if not already present
+        if (queryAnalysis.repos.length > 0 && !searchQuery.includes('repo:')) {
+          const repoFilters = queryAnalysis.repos.map((repo: string) => {
             // If it looks like a GitHub repo (contains a slash), format accordingly
             if (repo.includes('/')) {
               return `repo:^github\\.com/${repo}$`;
@@ -56,8 +59,10 @@ export function addTestTools(server: McpServer) {
           searchQuery += ` ${repoFilters.join(' ')}`;
         }
         
-        // Add result count limit
-        searchQuery += ' count:20';
+        // Add result count limit if not already present
+        if (!searchQuery.includes('count:')) {
+          searchQuery += ' count:20';
+        }
 
         // Step 3: Select the appropriate GraphQL query based on search type
         // For testing, show the process without actually executing the search
@@ -73,6 +78,9 @@ export function addTestTools(server: McpServer) {
 ${queryAnalysis.author ? `- Author filter: ${queryAnalysis.author}` : ''}
 ${queryAnalysis.after ? `- Date filter: after:${queryAnalysis.after}` : ''}
 ${queryAnalysis.repos.length > 0 ? `- Repository filters: ${queryAnalysis.repos.join(', ')}` : ''}
+
+## LLM Translation
+Your query was processed by an LLM (${process.env.OPENAI_MODEL || 'AI model'}) to generate the most accurate Sourcegraph syntax.
 
 ## Sourcegraph Query
 \`\`\`

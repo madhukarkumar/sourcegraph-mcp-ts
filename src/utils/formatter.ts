@@ -243,10 +243,88 @@ function escapeMarkdown(text: string): string {
     .replace(/\`/g, '\\`');
 }
 
+import { convertQueryToSourcegraphSyntax } from '../services/llm';
+
 /**
  * Analyze a natural language query to determine search type and parameters
+ * Now uses LLM-based parsing for more accurate conversion
  */
-export function analyzeQuery(query: string) {
+export async function analyzeQuery(query: string) {
+  try {
+    // Use LLM to convert the natural query to Sourcegraph syntax
+    const sourcegraphQuery = await convertQueryToSourcegraphSyntax(query);
+    console.log(`Converted query: ${sourcegraphQuery}`);
+    
+    // Parse the Sourcegraph query to extract components
+    return parseSourcegraphQuery(sourcegraphQuery, query);
+  } catch (error) {
+    console.error('Error during query analysis with LLM:', error);
+    // Fall back to the rule-based parsing if LLM fails
+    return parseWithRules(query);
+  }
+}
+
+/**
+ * Parse a Sourcegraph syntax query to extract components
+ */
+function parseSourcegraphQuery(sourcegraphQuery: string, originalQuery: string) {
+  // Default parameters
+  let searchType = 'file';
+  let searchQuery = sourcegraphQuery;
+  let author = undefined;
+  let after = undefined;
+  const repos: string[] = [];
+  
+  // Extract search type
+  const typeMatch = sourcegraphQuery.match(/\btype:(\w+)\b/);
+  if (typeMatch) {
+    searchType = typeMatch[1];
+    // Remove the type: parameter from the search query
+    searchQuery = searchQuery.replace(/\btype:\w+\b/, '').trim();
+  }
+  
+  // Extract author
+  const authorMatch = sourcegraphQuery.match(/\bauthor:([\w.-]+)\b/);
+  if (authorMatch) {
+    author = authorMatch[1];
+    // Remove the author: parameter from the search query
+    searchQuery = searchQuery.replace(/\bauthor:[\w.-]+\b/, '').trim();
+  }
+  
+  // Extract date/after
+  const afterMatch = sourcegraphQuery.match(/\bafter:(["'][^"']+["']|\S+)\b/);
+  if (afterMatch) {
+    after = afterMatch[1].replace(/["\']/g, '');
+    // Remove the after: parameter from the search query
+    searchQuery = searchQuery.replace(/\bafter:["'][^"']+["']|\bafter:\S+\b/, '').trim();
+  }
+  
+  // Extract repositories
+  const repoRegex = /\brepo:(["'][^"']+["']|\S+)\b/g;
+  let repoMatch;
+  while ((repoMatch = repoRegex.exec(sourcegraphQuery)) !== null) {
+    const repoName = repoMatch[1].replace(/["\']/g, '');
+    repos.push(repoName);
+    // We don't remove repo: from searchQuery as it's often needed in the final query
+  }
+
+  // Clean up any extra spaces
+  searchQuery = searchQuery.replace(/\s+/g, ' ').trim();
+  
+  return {
+    type: searchType,
+    query: searchQuery,
+    author,
+    after,
+    repos,
+    originalQuery  // Keep the original query for reference
+  };
+}
+
+/**
+ * Legacy rule-based parsing as fallback
+ */
+function parseWithRules(query: string) {
   // Default parameters
   let searchType = 'file';
   let searchQuery = query;
@@ -307,6 +385,7 @@ export function analyzeQuery(query: string) {
     query: searchQuery,
     author,
     after,
-    repos
+    repos,
+    originalQuery: query  // Keep the original query for reference
   };
 }
