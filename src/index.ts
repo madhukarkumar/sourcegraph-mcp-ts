@@ -1,6 +1,7 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import searchRouter from './routes/search';
+import apiRouter from './routes/api';
 // Import the HTTP server directly instead of calling setup function
 import './http-server'; // This will start the MCP server when imported
 
@@ -14,6 +15,9 @@ app.use(express.json());
 
 // Mount the search router under /search
 app.use('/search', searchRouter);
+
+// Mount the API router under /api
+app.use('/api', apiRouter);
 
 // Basic health check
 app.get('/', (req, res) => {

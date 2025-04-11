@@ -5,6 +5,7 @@ import {
 import { z } from "zod";
 import dotenv from 'dotenv';
 import axios from 'axios';
+import { naturalLanguageSearch } from './services/natural-language';
 
 // Load environment variables
 dotenv.config();
@@ -12,6 +13,8 @@ dotenv.config();
 // Sourcegraph API configuration
 const sgUrl = process.env.SOURCEGRAPH_URL;
 const sgToken = process.env.SOURCEGRAPH_TOKEN;
+
+import { addTestTools } from './test-tools';
 
 /**
  * Creates and configures the Sourcegraph MCP server
@@ -23,7 +26,7 @@ export function createServer() {
   const server = new McpServer({
     name: "sourcegraph-mcp-server",
     version: "1.0.0",
-    debug: true, // Enable debug mode
+    debug: false, // Disable debug mode in production to prevent console output breaking JSON
   });
 
   // Add a static resource
@@ -615,6 +618,38 @@ export function createServer() {
     }
   );
 
+  // Add a natural language search tool
+  server.tool(
+    "natural-search",
+    "Search code repositories using natural language queries",
+    { 
+      query: z.string().describe("Natural language query describing what you want to search for"),
+      max_results: z.number().optional().describe("Maximum number of results to return (default: 20)")
+    },
+    async ({ query, max_results }) => {
+      // Validate Sourcegraph credentials
+      const effectiveUrl = sgUrl || process.env.SOURCEGRAPH_URL;
+      const effectiveToken = sgToken || process.env.SOURCEGRAPH_TOKEN;
+      
+      if (!effectiveUrl || !effectiveToken) {
+        return {
+          content: [{ 
+            type: "text", 
+            text: "Error: Sourcegraph URL or token not configured. Please set SOURCEGRAPH_URL and SOURCEGRAPH_TOKEN environment variables." 
+          }],
+          isError: true
+        };
+      }
+
+      const result = await naturalLanguageSearch(query, {
+        url: effectiveUrl,
+        token: effectiveToken
+      });
+      
+      return result;
+    }
+  );
+
   // Add a debug tool to list available tools and methods
   server.tool(
     "debug",
@@ -630,7 +665,11 @@ export function createServer() {
               "search-code", 
               "search-commits", 
               "search-diffs",
-              "search-github-repos", 
+              "search-github-repos",
+              "natural-search",
+              "test-nl-search",
+              "test-connection",
+              "nl-search-help", 
               "debug"
             ],
             resources: [
@@ -654,6 +693,9 @@ export function createServer() {
     }
     throw new Error(`Tool '${toolName}' not found`);
   };
+
+  // Add test tools for easier debugging and validation
+  addTestTools(server);
 
   return server;
 }

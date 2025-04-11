@@ -1,422 +1,146 @@
-# Sourcegraph MCP Server
+# Sourcegraph MCP Server with Natural Language Search
 
-A Model Context Protocol (MCP) server for accessing [Sourcegraph](https://sourcegraph.com/) search capabilities. This server exposes Sourcegraph's code, commit, and diff search functionality through the standardized [Model Context Protocol (MCP)](https://modelcontextprotocol.io) interface.
+## Overview
 
-Implemented with the official [@modelcontextprotocol/sdk](https://npmjs.com/package/@modelcontextprotocol/sdk) TypeScript SDK (v1.9.0).
+A Model Context Protocol (MCP) server that allows AI assistants to search code repositories using natural language (plain English) queries through the Sourcegraph API.
 
-## What is this MCP Server?
+## Key Features
 
-This server implements the Model Context Protocol (MCP) to enable AI models and other MCP-compatible clients to leverage Sourcegraph's powerful code search capabilities through a standardized interface. It acts as a bridge between AI tools and Sourcegraph's repositories.
-
-### Features
-
+- **Natural Language Code Search**: Search using plain English queries
 - **Code Search**: Search for code across Sourcegraph repositories
-- **Commit Search**: Find specific commits with filtering by author, message, and date
-- **Diff Search**: Search for code changes (diffs) in pull/merge requests
-- **Echo Tool**: Simple tool for testing connectivity
-- **Debug Tool**: Introspect the server's available tools and methods
-- **HTTP/SSE Transport**: Server exposes MCP interface over HTTP with Server-Sent Events
+- **Commit Search**: Find commits with various filters
+- **Diff Search**: Find code changes/PRs
+- **GitHub-specific Search**: Search in specific GitHub repositories
 
-## Development
+## How to Search with Natural Language
 
-### Prerequisites
+You can search code using plain English in several ways:
 
-- Node.js (v16 or higher)
-- npm (v7 or higher)
-- A [Sourcegraph](https://sourcegraph.com/) instance and API token
+### Using MCP Tools (for AI assistants)
 
-### Installing and Running Locally
+1. Connect to the MCP server at http://localhost:3002
+2. Use the `natural-search` tool with a query parameter:
+   ```json
+   {
+     "name": "natural-search",
+     "params": {
+       "query": "find all files that have stdio related code"
+     }
+   }
+   ```
 
-1. Clone the repository or download the source code
+### Using the Debug Server (for testing)
 
-2. Install dependencies:
+1. Start the debug server: `node scripts/debug-server.js`
+2. Connect MCP Inspector to http://localhost:3003
+3. Try the `test-nl-search` tool with a natural language query
+
+### Using the Direct API (for applications)
 
 ```bash
+curl -X POST http://localhost:3001/api/search \
+  -H "Content-Type: application/json" \
+  -d '{"query":"find all files that have stdio related code", "type":"natural"}'
+```
+
+## Natural Language Query Examples
+
+- **Code search**: "Find all files that have stdio related code"
+- **Feature search**: "Show me authentication code in the frontend"
+- **Author search**: "Find commits by Jane from last week"
+- **Date-based search**: "What changes were made to the API in March?"
+- **Repository-specific**: "Look for database files in the sourcegraph repository"
+
+## Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/your-repo/sourcegraph-mcp-server.git
+cd sourcegraph-mcp-server
+
+# Install dependencies
 npm install
+
+# Build the project
+npm run build
 ```
 
-3. Configure environment variables:
+## Configuration
 
-```bash
-cp .env.example .env
-```
-
-4. Edit the `.env` file and add your Sourcegraph URL and API token:
+Create a `.env` file in the root directory with the following variables:
 
 ```
-SOURCEGRAPH_URL=https://your-instance.sourcegraph.com
+SOURCEGRAPH_URL=https://your-sourcegraph-instance.com
 SOURCEGRAPH_TOKEN=your_api_token
 PORT=3001
-MCP_PORT=3002  # Optional, defaults to 3002
+MCP_PORT=3002
 ```
 
-5. Build the server:
+## Running the Server
 
 ```bash
-npm run build
-```
+# Start the API server (for direct API access)
+npm start
 
-6. Start the MCP server in your preferred mode:
-
-   * HTTP server mode:
-   ```bash
-   npm run start:mcp
-   ```
-
-   * STDIO mode (for use as a child process):
-   ```bash
-   npm run start:stdio
-   ```
-
-   * Combined server (REST API + HTTP MCP):
-   ```bash
-   npm start
-   ```
-
-The HTTP MCP server will run on port 3002, while the main API server runs on port 3001 (or the PORT specified in your .env file).
-
-### Publishing for NPX Usage
-
-To make your MCP server available globally via NPX:
-
-1. Build the project:
-```bash
-npm run build
-```
-
-2. Test locally by installing globally:
-```bash
-npm install -g .
-```
-
-3. Run using the global installation:
-```bash
-sourcegraph-mcp-server
-```
-
-4. For production, publish to npm:
-```bash
-npm publish
-```
-
-After publishing, users can run it directly with:
-```bash
-npx -y sourcegraph-mcp-server
-```
-
-### Testing Locally with MCP Inspector
-
-1. Install MCP Inspector:
-   - Clone the [MCP Inspector repository](https://github.com/modelcontextprotocol/inspector)
-   - Follow the installation instructions in the repository
-
-2. Run the MCP server in HTTP mode:
-
-```bash
+# Start the MCP server (for integration with AI assistants)
 npm run start:mcp
+
+# Start the debug server (for MCP protocol testing)
+node scripts/debug-server.js
 ```
 
-3. Open MCP Inspector and connect to `http://localhost:3002/sse`
+## Testing with MCP Inspector
 
-4. Browse available tools and send test requests
+To test the server using the [MCP Inspector](https://github.com/anthropics/mcp-inspector/):
 
-> Note: MCP Inspector only works with the HTTP transport. For testing STDIO mode, use Claude Desktop with a process connection or implement your own STDIO-based client.
+1. First, start the debug server: `node scripts/debug-server.js`
+2. Open the MCP Inspector and connect to: `http://localhost:3003`
+3. Try the tools in this order:
 
-You can also test using cURL:
+   * **`echo`** with message "Hello World" (to test basic connectivity)
+   * **`test-nl-search`** with "find stdio code" (to test language parsing)
+   * **`test-connection`** (to verify Sourcegraph connection)
 
-```bash
-# Connect to SSE endpoint
-curl -N http://localhost:3002/sse
+4. For the full MCP server, connect to http://localhost:3002 and use:
+   * **`natural-search`** with your plain English query
 
-# Use the debug tool
-curl -X POST \
-  "http://localhost:3002/messages?sessionId=YOUR_SESSION_ID" \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "jsonrpc": "2.0",
-    "id": 1,
-    "method": "tools/invoke",
-    "params": {
-      "name": "debug",
-      "parameters": {}
-    }
-  }'
-```
+## API Endpoints
 
-## How to Use This MCP Server
+The server provides direct API endpoints:
 
-### Claude Desktop Integration
-
-#### HTTP Connection
-
-1. Open Claude Desktop app
-2. Go to Settings > MCP Servers
-3. Click "Add Server"
-4. Enter the server URL: `http://localhost:3002`
-5. Click "Add"
-
-Claude will automatically discover the tools provided by this MCP server.
-
-#### STDIO Connection (Local Process)
-
-The MCP server can also be configured to run as a local process with STDIO communication:
-
-1. Open Claude Desktop app
-2. Go to Settings > MCP Servers
-3. Click "Add Process"
-4. Configure the process:
-   - Command: `npx` (Make sure you have Node.js installed)
-   - Arguments: `-y sourcegraph-mcp-server`
-   - Working Directory: Leave blank (will use the default)
-   - Environment Variables: Add your Sourcegraph credentials
-     - SOURCEGRAPH_URL: `https://your-instance.sourcegraph.com`
-     - SOURCEGRAPH_TOKEN: `your_api_token`
-5. Click "Add"
-
-##### Configuration in Claude Desktop JSON config
-
-If you prefer to edit Claude Desktop's configuration file directly, add this to your config (with your actual Sourcegraph URL and token):
-
-```json
-{
-  "mcpServers": {
-    "sourcegraph": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "sourcegraph-mcp-server"
-      ],
-      "env": {
-        "SOURCEGRAPH_URL": "https://your-instance.sourcegraph.com",
-        "SOURCEGRAPH_TOKEN": "your_api_token"
-      }
-    }
+- **`POST /api/search`**: Natural language search
+  ```json
+  {
+    "query": "find stdio related code",
+    "type": "natural"
   }
-}
-```
+  ```
 
-Alternatively, if you've cloned the repository locally, you can configure it like this:
-1. Build the project: `npm run build`
-2. Configure Claude Desktop to use your local build:
-   - Command: `node` (or the full path to your Node.js executable)
-   - Arguments: `path/to/mcp_servers/sg-ts-mcp-server/dist/stdio-server.js`
-   - Working Directory: `path/to/mcp_servers/sg-ts-mcp-server`
-   - Environment Variables: Same as above
-
-### Other MCP Clients
-
-Any client that supports the Model Context Protocol can connect to the server either:
-- HTTP: `http://localhost:3002`
-- STDIO: By launching the server process with appropriate environment variables
-
-## Available Tools
-
-### Echo Tool
-
-- **Name**: `echo`
-- **Parameters**: `message` (string)
-- **Returns**: A greeting with your message
-
-**Example**:
-```json
-{
-  "name": "echo",
-  "parameters": {
-    "message": "Hello, MCP!"
+- **`POST /search/code`**: Search for code (with auto-conversion from natural language)
+  ```json
+  {
+    "query": "find stdio related code",
+    "directQuery": false
   }
-}
-```
+  ```
 
-### Search Code Tool
+## Available MCP Tools
 
-- **Name**: `search-code`
-- **Parameters**:
-  - `query` (string): The search query text
-  - `type` (string, optional): Type of search - "file", "commit", or "diff" (default: "file")
-- **Returns**: Matching code results from Sourcegraph
+- **`natural-search`**: Search using natural language
+- **`search-code`**: Search for code with direct query
+- **`search-commits`**: Search for commits
+- **`search-diffs`**: Search for code changes
+- **`search-github-repos`**: Search in specific GitHub repositories
+- **`test-nl-search`**: Test natural language parsing
+- **`test-connection`**: Test Sourcegraph connection
+- **`nl-search-help`**: Get help for natural language search
+- **`echo`**: Simple echo tool for testing
+- **`debug`**: Show available tools
 
-**Example**:
-```json
-{
-  "name": "search-code",
-  "parameters": {
-    "query": "function example",
-    "type": "file"
-  }
-}
-```
+## Debugging and Troubleshooting
 
-### Search GitHub Repositories Tool
+See [FIXED_MCP_INSPECTOR.md](./FIXED_MCP_INSPECTOR.md) for detailed troubleshooting guidelines for MCP connection issues.
 
-- **Name**: `search-github-repos`
-- **Parameters**:
-  - `query` (string): The search query text
-  - `repos` (string): Comma-separated list of GitHub repositories to search in (e.g., 'owner/repo1,owner/repo2')
-  - `type` (string, optional): Type of search - "file", "commit", or "diff" (default: "file")
-- **Returns**: Matching code results from specified GitHub repositories
-
-**Example**:
-```json
-{
-  "name": "search-github-repos",
-  "parameters": {
-    "query": "function fetchData",
-    "repos": "facebook/react,vercel/next.js",
-    "type": "file"
-  }
-}
-```
-
-### Search Commits Tool
-
-- **Name**: `search-commits`
-- **Parameters**:
-  - `author` (string, optional): Filter by commit author
-  - `message` (string, optional): Filter by commit message
-  - `after` (string, optional): Filter for commits after this date (YYYY-MM-DD)
-- **Returns**: Matching commits from Sourcegraph
-
-**Example**:
-```json
-{
-  "name": "search-commits",
-  "parameters": {
-    "author": "john",
-    "message": "fix bug",
-    "after": "2023-01-01"
-  }
-}
-```
-
-### Search Diffs Tool
-
-- **Name**: `search-diffs`
-- **Parameters**:
-  - `query` (string, optional): Search query text
-  - `author` (string, optional): Filter by commit author
-  - `after` (string, optional): Filter for diffs after this date (YYYY-MM-DD)
-- **Returns**: Matching diffs (code changes) from Sourcegraph
-
-**Example**:
-```json
-{
-  "name": "search-diffs",
-  "parameters": {
-    "query": "fix",
-    "author": "john",
-    "after": "2023-01-01"
-  }
-}
-```
-
-### Debug Tool
-
-- **Name**: `debug`
-- **Parameters**: none
-- **Returns**: Information about available tools and methods
-
-**Example**:
-```json
-{
-  "name": "debug",
-  "parameters": {}
-}
-```
-
-## Usage Examples
-
-Here are examples of how to use the MCP server's tools with Claude or other MCP clients:
-
-### Using the echo tool
-
-Test basic connectivity with the echo tool:
-
-```
-Please use the echo tool to say hello to the world.
-```
-
-Claude will call:
-```json
-{
-  "name": "echo",
-  "parameters": {
-    "message": "world"
-  }
-}
-```
-
-Response:
-```
-Hello world
-```
-
-### Searching for code
-
-Search for specific code patterns across repositories:
-
-```
-Find examples of authentication middleware in code repositories.
-```
-
-Claude will call:
-```json
-{
-  "name": "search-code",
-  "parameters": {
-    "query": "authentication middleware",
-    "type": "file"
-  }
-}
-```
-
-### Searching in specific GitHub repositories
-
-Search for code in specific GitHub repositories:
-
-```
-Find React hook examples in the facebook/react repository.
-```
-
-Claude will call:
-```json
-{
-  "name": "search-github-repos",
-  "parameters": {
-    "query": "useEffect useState",
-    "repos": "facebook/react",
-    "type": "file"
-  }
-}
-```
-
-### Finding commits by author
-
-Search for commits from a specific author:
-
-```
-Find commits by John Doe from January 2023 onward related to security fixes.
-```
-
-Claude will call:
-```json
-{
-  "name": "search-commits",
-  "parameters": {
-    "author": "John Doe",
-    "message": "security",
-    "after": "2023-01-01"
-  }
-}
-```
-
-## Troubleshooting
-
-- If you get a "No active connections" error, make sure you have an active SSE connection
-- Verify your Sourcegraph credentials in the .env file if you get API errors
-- Check the server logs for detailed error messages
-- For STDIO mode, ensure environment variables are correctly set in the process configuration
-- If the server fails to start, check that you've built the project with `npm run build`
-
-## License
-
-MIT
+- **API Connection**: Test basic Sourcegraph connectivity with the `test-connection` tool
+- **MCP Issues**: Run the debug server for clear logging of all requests and responses
+- **Query Conversion**: Use `test-nl-search` to see how queries are interpreted

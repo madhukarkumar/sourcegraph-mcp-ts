@@ -8,11 +8,13 @@ const mcp_js_1 = require("@modelcontextprotocol/sdk/server/mcp.js");
 const zod_1 = require("zod");
 const dotenv_1 = __importDefault(require("dotenv"));
 const axios_1 = __importDefault(require("axios"));
+const natural_language_1 = require("./services/natural-language");
 // Load environment variables
 dotenv_1.default.config();
 // Sourcegraph API configuration
 const sgUrl = process.env.SOURCEGRAPH_URL;
 const sgToken = process.env.SOURCEGRAPH_TOKEN;
+const test_tools_1 = require("./test-tools");
 /**
  * Creates and configures the Sourcegraph MCP server
  * with resources, prompts, and tools
@@ -23,7 +25,7 @@ function createServer() {
     const server = new mcp_js_1.McpServer({
         name: "sourcegraph-mcp-server",
         version: "1.0.0",
-        debug: true, // Enable debug mode
+        debug: false, // Disable debug mode in production to prevent console output breaking JSON
     });
     // Add a static resource
     server.resource("hello", "hello://sourcegraph", async (uri) => ({
@@ -517,6 +519,29 @@ function createServer() {
             };
         }
     });
+    // Add a natural language search tool
+    server.tool("natural-search", "Search code repositories using natural language queries", {
+        query: zod_1.z.string().describe("Natural language query describing what you want to search for"),
+        max_results: zod_1.z.number().optional().describe("Maximum number of results to return (default: 20)")
+    }, async ({ query, max_results }) => {
+        // Validate Sourcegraph credentials
+        const effectiveUrl = sgUrl || process.env.SOURCEGRAPH_URL;
+        const effectiveToken = sgToken || process.env.SOURCEGRAPH_TOKEN;
+        if (!effectiveUrl || !effectiveToken) {
+            return {
+                content: [{
+                        type: "text",
+                        text: "Error: Sourcegraph URL or token not configured. Please set SOURCEGRAPH_URL and SOURCEGRAPH_TOKEN environment variables."
+                    }],
+                isError: true
+            };
+        }
+        const result = await (0, natural_language_1.naturalLanguageSearch)(query, {
+            url: effectiveUrl,
+            token: effectiveToken
+        });
+        return result;
+    });
     // Add a debug tool to list available tools and methods
     server.tool("debug", "Lists all available tools and methods", {}, async () => ({
         content: [
@@ -529,6 +554,10 @@ function createServer() {
                         "search-commits",
                         "search-diffs",
                         "search-github-repos",
+                        "natural-search",
+                        "test-nl-search",
+                        "test-connection",
+                        "nl-search-help",
                         "debug"
                     ],
                     resources: [
@@ -550,6 +579,8 @@ function createServer() {
         }
         throw new Error(`Tool '${toolName}' not found`);
     };
+    // Add test tools for easier debugging and validation
+    (0, test_tools_1.addTestTools)(server);
     return server;
 }
 exports.createServer = createServer;

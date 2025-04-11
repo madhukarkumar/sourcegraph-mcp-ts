@@ -2,7 +2,7 @@
 
 import express from "express";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
-import { createServer } from "./mcp-server.js";
+import { createServer } from "./mcp-server";
 import dotenv from 'dotenv';
 
 // Load environment variables
@@ -13,7 +13,7 @@ async function main() {
   console.log(`SOURCEGRAPH_URL: ${process.env.SOURCEGRAPH_URL ? 'Set' : 'NOT SET'}`); 
   console.log(`SOURCEGRAPH_TOKEN: ${process.env.SOURCEGRAPH_TOKEN ? 'Set (redacted)' : 'NOT SET'}`);
 
-  // Create the server
+  // Create the server with debug mode disabled to prevent console output
   const server = createServer();
   
   // Create Express app
@@ -72,21 +72,20 @@ async function main() {
   app.post("/messages", express.json(), async (req, res) => {
     try {
       // Extract sessionId from query parameters
-      const sessionId = req.query.sessionId as string;
+      const sessionId = req.body.connectionId || req.query.sessionId as string;
       
-      console.log(`Received message for session ${sessionId}`);
+      // Process message silently to avoid breaking JSON response
       
       if (!sessionId || !connections.has(sessionId)) {
         // If no sessionId or connection not found, try the first connection
         if (connections.size === 0) {
           return res.status(400).json({ error: "No active connections" });
         }
-        console.log('No specific session found, using first available connection');
+        // Use the first available connection without logging to avoid breaking JSON
         const transport = connections.values().next().value;
         await transport.handlePostMessage(req, res, req.body);
       } else {
-        // Use the specific connection for this session
-        console.log(`Using connection for session ${sessionId}`);
+        // Use the specific connection for this session without logging
         const transport = connections.get(sessionId);
         await transport.handlePostMessage(req, res, req.body);
       }

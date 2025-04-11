@@ -6,7 +6,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const sse_js_1 = require("@modelcontextprotocol/sdk/server/sse.js");
-const mcp_server_js_1 = require("./mcp-server.js");
+const mcp_server_1 = require("./mcp-server");
 const dotenv_1 = __importDefault(require("dotenv"));
 // Load environment variables
 dotenv_1.default.config();
@@ -14,8 +14,8 @@ async function main() {
     console.log('Starting Sourcegraph MCP Server...');
     console.log(`SOURCEGRAPH_URL: ${process.env.SOURCEGRAPH_URL ? 'Set' : 'NOT SET'}`);
     console.log(`SOURCEGRAPH_TOKEN: ${process.env.SOURCEGRAPH_TOKEN ? 'Set (redacted)' : 'NOT SET'}`);
-    // Create the server
-    const server = (0, mcp_server_js_1.createServer)();
+    // Create the server with debug mode disabled to prevent console output
+    const server = (0, mcp_server_1.createServer)();
     // Create Express app
     const app = (0, express_1.default)();
     const port = process.env.MCP_PORT || 3002;
@@ -66,20 +66,19 @@ async function main() {
     app.post("/messages", express_1.default.json(), async (req, res) => {
         try {
             // Extract sessionId from query parameters
-            const sessionId = req.query.sessionId;
-            console.log(`Received message for session ${sessionId}`);
+            const sessionId = req.body.connectionId || req.query.sessionId;
+            // Process message silently to avoid breaking JSON response
             if (!sessionId || !connections.has(sessionId)) {
                 // If no sessionId or connection not found, try the first connection
                 if (connections.size === 0) {
                     return res.status(400).json({ error: "No active connections" });
                 }
-                console.log('No specific session found, using first available connection');
+                // Use the first available connection without logging to avoid breaking JSON
                 const transport = connections.values().next().value;
                 await transport.handlePostMessage(req, res, req.body);
             }
             else {
-                // Use the specific connection for this session
-                console.log(`Using connection for session ${sessionId}`);
+                // Use the specific connection for this session without logging
                 const transport = connections.get(sessionId);
                 await transport.handlePostMessage(req, res, req.body);
             }

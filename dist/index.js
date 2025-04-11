@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const search_1 = __importDefault(require("./routes/search"));
+const api_1 = __importDefault(require("./routes/api"));
 // Import the HTTP server directly instead of calling setup function
 require("./http-server"); // This will start the MCP server when imported
 dotenv_1.default.config();
@@ -15,6 +16,8 @@ const port = process.env.PORT || 3000;
 app.use(express_1.default.json());
 // Mount the search router under /search
 app.use('/search', search_1.default);
+// Mount the API router under /api
+app.use('/api', api_1.default);
 // Basic health check
 app.get('/', (req, res) => {
     res.send('Sourcegraph Multi-Search Server is running');
