@@ -1,6 +1,6 @@
 {
-  "name": "sourcegraph-search-server",
-  "version": "1.0.0",
+  "name": "sourcegraph-mcp-server",
+  "version": "1.3.0",
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",

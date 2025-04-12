@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import axios from 'axios';
 import { naturalLanguageSearch } from './services/natural-language';
 import { analyzeQuery, formatSearchResults } from './utils/formatter';
+import { executeSourcegraphSearch, getFileSearchQuery, getCommitSearchQuery, getDiffSearchQuery } from './services/sourcegraph';
 
 // Load environment variables
 dotenv.config();
@@ -85,7 +86,7 @@ export function createServer() {
   };
   server.tool(
     "echo",
-    "Echoes back a message with 'Hello' prefix",
+    "Simple echo tool for testing that returns your message with 'Hello' prefix.\n\n    WHEN TO USE THIS TOOL:\n    - When testing if the MCP server is responsive\n    - When verifying tool invocation is working correctly\n    - For basic connectivity tests\n    - When learning how to use the MCP server\n\n    PARAMETER USAGE:\n    - message: Any text string you want echoed back\n\n    EXAMPLES:\n    - message = 'world' returns 'Hello world'\n    - message = 'testing' returns 'Hello testing'\n    \n    This is primarily a diagnostic tool to verify the system is working properly.",
     { message: z.string().describe("The message to echo") },
     async ({ message }) => ({
       content: [
@@ -97,10 +98,45 @@ export function createServer() {
     })
   );
 
-  // Add code search tool - now with natural language processing support
+  
+
+  // Add code search tool - now using direct Sourcegraph API access
   server.tool(
     "search-code",
-    "Search for code across Sourcegraph repositories",
+    `Searches code across repositories using Sourcegraph's API. 
+   
+    Query parameters and syntax examples:
+    
+    - File search (default):
+      - Basic search: functionName - Search for the term across repositories
+      - Repository filter: repo:^github\\.com/owner/repo$ - Limit search to specific repositories
+      - File filter: file:\\.js$ - Search only in files with specific patterns
+      - Language filter: lang:javascript - Search only in specific language files
+      - Combined filters: repo:^github\\.com/org/repo$ file:\\.js$ functionName
+      - Content search: content:"exact phrase" - Search for exact text match
+      - Boolean operators: term1 AND term2, term1 OR term2, term1 NOT term2
+      - Regular expressions: /pattern/ or use patternType:regexp in query
+      
+    - Commit search:
+      - Basic: type:commit searchTerm - Search in commit metadata
+      - Message filter: type:commit message:"fix bug" - Search in commit messages
+      - Author filter: type:commit author:username - Filter by commit author
+      - Time filters: type:commit after:"2 weeks ago" or before:"2023-01-01"
+      - Repository branch: repo:owner/repo@branch type:commit term - Search in specific branch
+      - Example: type:commit message:"security fix" author:john after:"1 month ago"
+ 
+    - Diff search:
+      - Basic: type:diff searchTerm - Search in code changes
+      - Added/removed code: type:diff select:commit.diff.added term - Only in added code
+      - Repository filter: repo:owner/repo type:diff term - Limit to specific repositories
+      - Time range: type:diff after:"1 week ago" term - Recent changes only
+      - Example: type:diff select:commit.diff.removed securityCheck
+      
+    Notes:
+    - The function automatically adds the appropriate type: parameter if not included in the query.
+    - Results are limited to 20 by default. Use count:N in your query to adjust this limit.
+    - For regex searches, use /pattern/ syntax or add patternType:regexp to your query.
+    - All searches use keyword pattern matching by default (case-insensitive).`,
     { 
       query: z.string().describe("Search query text"), 
       type: z.enum(['file', 'commit', 'diff']).default('file').describe("Type of search: file, commit, or diff")
@@ -121,95 +157,47 @@ export function createServer() {
       }
 
       try {
-        // Check if the query seems to be natural language
-        // If it contains common phrases like "find" or doesn't have specific operators
-        const looksLikeNaturalLanguage = /^(find|show|get|search for|look for|what|where|how|when)/i.test(query) ||
-          !/(repo:|type:|lang:|after:|content:|file:|case:|patterntype:)/i.test(query);
+        // No natural language processing - use direct query syntax
+        // Just add the type and count parameters if not present
+        let finalQuery = query.includes('type:') ? query : `${query} type:${type}`;
+        finalQuery = finalQuery.includes('count:') ? finalQuery : `${finalQuery} count:20`;
         
-        let finalQuery;
-        
-        if (looksLikeNaturalLanguage) {
-          // Process through natural language query analyzer
-          try {
-            // Use the analyzeQuery function to get a more precise query
-            const analyzed = await analyzeQuery(query);
-            // Use the suggested type if provided in parameters
-            const finalType = type || analyzed.type;
-            finalQuery = `${analyzed.query} type:${finalType} count:20`;
-          } catch (nlError) {
-            console.error('Natural language processing failed, using original query:', nlError);
-            finalQuery = `${query} type:${type} count:20`;
-          }
-        } else {
-          // Direct Sourcegraph syntax - just add type if not already present
-          finalQuery = query.includes('type:') ? query : `${query} type:${type}`;
-          // Add count if not present
-          finalQuery = finalQuery.includes('count:') ? finalQuery : `${finalQuery} count:20`;
+        // Select appropriate GraphQL query based on search type
+        let graphqlQuery;
+        switch(type) {
+          case 'commit':
+            graphqlQuery = getCommitSearchQuery();
+            break;
+          case 'diff':
+            graphqlQuery = getDiffSearchQuery();
+            break;
+          case 'file':
+          default:
+            graphqlQuery = getFileSearchQuery();
+            break;
         }
         
-        // The GraphQL query
-        const graphqlQuery = `
-          query CodeSearch($query: String!) {
-            search(query: $query, version: V3) {
-              results {
-                matchCount
-                results {
-                  __typename
-                  ... on FileMatch {
-                    repository { name }
-                    file { path }
-                    lineMatches {
-                      lineNumber
-                      preview
-                    }
-                  }
-                  ... on CommitSearchResult {
-                    commit {
-                      oid
-                      message
-                      author {
-                        person {
-                          name
-                          email
-                        }
-                        date
-                      }
-                      repository { name }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        `;
-        
-        // Headers for Sourcegraph API
-        const headers = {
-          'Authorization': `token ${effectiveToken}`,
-          'Content-Type': 'application/json'
-        };
-        
-        // Make the request to Sourcegraph API
-        const response = await axios.post(
-          `${effectiveUrl}/.api/graphql`,
-          { query: graphqlQuery, variables: { query: finalQuery } },
-          { headers }
+        // Execute the search using the Sourcegraph service
+        const response = await executeSourcegraphSearch(
+          finalQuery,
+          graphqlQuery,
+          { url: effectiveUrl, token: effectiveToken }
         );
         
-        if (response.data.errors) {
+        if (response.errors) {
           return {
             content: [{ 
               type: "text", 
-              text: `Sourcegraph API Error: ${JSON.stringify(response.data.errors)}` 
+              text: `Sourcegraph API Error: ${JSON.stringify(response.errors)}` 
             }],
             isError: true
           };
         }
         
         // Format the results
-        const results = response.data.data.search.results;
+        const results = response.data.search.results;
         
-        // Use the enhanced formatter for results
+        // Use the formatter for results
         const formattedResults = formatSearchResults(results, { query: finalQuery, type });
         
         return {
@@ -231,10 +219,10 @@ export function createServer() {
     }
   );
 
-  // Add commit search tool
+  // Add commit search tool - using direct Sourcegraph API
   server.tool(
     "search-commits",
-    "Search for commits in Sourcegraph repositories",
+    "Search for commits in Sourcegraph repositories with flexible filtering options.\n\n    WHEN TO USE THIS TOOL:\n    - When you need to find specific commits across repositories\n    - When searching for code changes by a particular author\n    - When looking for commits within a particular timeframe\n    - When searching for specific commit messages or fixes\n\n    PARAMETER USAGE:\n    - author: The username of the commit author (e.g., 'jane', 'john.doe')\n    - message: Text to search for in commit messages (e.g., 'fix authentication bug')\n    - after: Date filter in YYYY-MM-DD format (e.g., '2023-01-15') or relative time ('2 weeks ago')\n\n    SEARCH EXAMPLES:\n    - Find security fixes: message = 'security fix'\n    - Find recent commits by a specific author: author = 'username', after = '2023-10-01'\n    - Find all commits mentioning a specific feature: message = 'user authentication'\n    \n    Notes:\n    - The tool automatically adds 'type:commit' to your search\n    - Results are limited to 20 by default\n    - Date strings in 'after' can be exact dates or relative like '2 weeks ago'\n    - Commit results include hash, message, author, and date",
     { 
       author: z.string().optional().describe("Filter by commit author"),
       message: z.string().optional().describe("Filter by commit message"),
@@ -256,100 +244,35 @@ export function createServer() {
       }
 
       try {
-        // Check if the message parameter might be a natural language query
-        let finalQuery;
-        let nlQuery = message;
+        // Build the search query using provided parameters directly
+        let finalQuery = 'type:commit';
+        if (author) finalQuery += ` author:${author}`;
+        if (message) finalQuery += ` message:${message}`;
+        if (after) finalQuery += ` after:${after}`;
+        finalQuery += ' count:20';
         
-        // Only attempt NL processing if message looks like natural language
-        if (nlQuery && /^(find|show|get|search for|look for|what|where|how|when)/i.test(nlQuery)) {
-          try {
-            // Use the analyzeQuery function to get a more precise query
-            const analyzed = await analyzeQuery(nlQuery);
-            
-            // Build the final query using the analyzed components and any explicit parameters
-            finalQuery = 'type:commit';
-            
-            // Add search terms from analysis
-            if (analyzed.query) finalQuery += ` ${analyzed.query}`;
-            
-            // Use explicitly provided parameters if available, otherwise use analyzed ones
-            const finalAuthor = author || analyzed.author;
-            const finalAfter = after || analyzed.after;
-            
-            if (finalAuthor) finalQuery += ` author:${finalAuthor}`;
-            if (finalAfter) finalQuery += ` after:${finalAfter}`;
-            finalQuery += ' count:20';
-          } catch (nlError) {
-            console.error('Natural language processing failed, using original parameters:', nlError);
-            // Fall back to standard query building
-            finalQuery = 'type:commit';
-            if (author) finalQuery += ` author:${author}`;
-            if (message) finalQuery += ` message:${message}`;
-            if (after) finalQuery += ` after:${after}`;
-            finalQuery += ' count:20';
-          }
-        } else {
-          // Build the search query using provided parameters directly
-          finalQuery = 'type:commit';
-          if (author) finalQuery += ` author:${author}`;
-          if (message) finalQuery += ` message:${message}`;
-          if (after) finalQuery += ` after:${after}`;
-          finalQuery += ' count:20';
-        }
+        // Get the commit search GraphQL query
+        const graphqlQuery = getCommitSearchQuery();
         
-        // The GraphQL query
-        const graphqlQuery = `
-          query CommitSearch($query: String!) {
-            search(query: $query, version: V3) {
-              results {
-                matchCount
-                results {
-                  __typename
-                  ... on CommitSearchResult {
-                    commit {
-                      oid
-                      message
-                      author {
-                        person {
-                          name
-                          email
-                        }
-                        date
-                      }
-                      repository { name }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        `;
-        
-        // Headers for Sourcegraph API
-        const headers = {
-          'Authorization': `token ${effectiveToken}`,
-          'Content-Type': 'application/json'
-        };
-        
-        // Make the request to Sourcegraph API
-        const response = await axios.post(
-          `${effectiveUrl}/.api/graphql`,
-          { query: graphqlQuery, variables: { query: finalQuery } },
-          { headers }
+        // Execute the search using the Sourcegraph service
+        const response = await executeSourcegraphSearch(
+          finalQuery,
+          graphqlQuery,
+          { url: effectiveUrl, token: effectiveToken }
         );
         
-        if (response.data.errors) {
+        if (response.errors) {
           return {
             content: [{ 
               type: "text", 
-              text: `Sourcegraph API Error: ${JSON.stringify(response.data.errors)}` 
+              text: `Sourcegraph API Error: ${JSON.stringify(response.errors)}` 
             }],
             isError: true
           };
         }
         
-        // Format the results using the enhanced formatter
-        const results = response.data.data.search.results;
+        // Format the results
+        const results = response.data.search.results;
         const formattedResults = formatSearchResults(results, { query: finalQuery, type: 'commit' });
         
         return {
@@ -371,10 +294,10 @@ export function createServer() {
     }
   );
 
-  // Add diff search tool
+  // Add diff search tool - using direct Sourcegraph API
   server.tool(
     "search-diffs",
-    "Search for code changes (diffs) in Sourcegraph repositories",
+    "Search for code changes (diffs) in Sourcegraph repositories with detailed filtering.\n\n    WHEN TO USE THIS TOOL:\n    - When looking for specific code changes or modifications\n    - When you need to find added or removed code\n    - When tracking changes by specific authors\n    - When investigating changes made during a particular time period\n\n    PARAMETER USAGE:\n    - query: Terms to search for in the changed code (e.g., 'fix memory leak')\n    - author: Filter diffs by the commit author (e.g., 'jane.smith')\n    - after: Filter for changes after a specific date (YYYY-MM-DD or relative time)\n\n    ADVANCED SEARCH TECHNIQUES:\n    - Find added code: query = 'select:commit.diff.added new_function'\n    - Find removed code: query = 'select:commit.diff.removed old_function'\n    - Limit to specific file types: query = 'path:\\.js$ authentication'\n    - Combine author with timeframe: author = 'alex', after = '2 months ago'\n    \n    Notes:\n    - Diffs show hunks of changed code for each modification\n    - Changes include file path, line number ranges, and exact modifications\n    - The tool automatically adds 'type:diff' to your search\n    - Results include commit context (message, author, date) along with the changes",
     { 
       query: z.string().optional().describe("Search query text"),
       author: z.string().optional().describe("Filter by commit author"),
@@ -396,106 +319,35 @@ export function createServer() {
       }
 
       try {
-        // Check if the query looks like natural language
-        let finalQuery;
+        // Build the search query with provided parameters directly
+        let finalQuery = 'type:diff';
+        if (query) finalQuery += ` ${query}`;
+        if (author) finalQuery += ` author:${author}`;
+        if (after) finalQuery += ` after:${after}`;
+        finalQuery += ' count:20';
         
-        if (query && /^(find|show|get|search for|look for|what|where|how|when)/i.test(query)) {
-          // Process through natural language query analyzer
-          try {
-            // Use the analyzeQuery function to get a more precise query
-            const analyzed = await analyzeQuery(query);
-            finalQuery = analyzed.query;
-            
-            // Use explicitly provided parameters if available
-            const finalAuthor = author || analyzed.author;
-            const finalAfter = after || analyzed.after;
-            
-            finalQuery = `type:diff ${finalQuery}`;
-            if (finalAuthor) finalQuery += ` author:${finalAuthor}`;
-            if (finalAfter) finalQuery += ` after:${finalAfter}`;
-            finalQuery += ' count:20';
-          } catch (nlError) {
-            console.error('Natural language processing failed, using original query:', nlError);
-            // Fall back to standard query building
-            finalQuery = 'type:diff';
-            if (query) finalQuery += ` ${query}`;
-            if (author) finalQuery += ` author:${author}`;
-            if (after) finalQuery += ` after:${after}`;
-            finalQuery += ' count:20';
-          }
-        } else {
-          // Build the search query with provided parameters
-          finalQuery = 'type:diff';
-          if (query) finalQuery += ` ${query}`;
-          if (author) finalQuery += ` author:${author}`;
-          if (after) finalQuery += ` after:${after}`;
-          finalQuery += ' count:20';
-        }
+        // Get the diff search GraphQL query
+        const graphqlQuery = getDiffSearchQuery();
         
-        // The GraphQL query
-        const graphqlQuery = `
-          query DiffSearch($query: String!) {
-            search(query: $query, version: V3) {
-              results {
-                matchCount
-                results {
-                  __typename
-                  ... on CommitSearchResult {
-                    commit {
-                      oid
-                      message
-                      author {
-                        person {
-                          name
-                          email
-                        }
-                        date
-                      }
-                      repository { name }
-                    }
-                    diff {
-                      fileDiffs {
-                        oldPath
-                        newPath
-                        hunks {
-                          body
-                          oldRange { start, lines }
-                          newRange { start, lines }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        `;
-        
-        // Headers for Sourcegraph API
-        const headers = {
-          'Authorization': `token ${effectiveToken}`,
-          'Content-Type': 'application/json'
-        };
-        
-        // Make the request to Sourcegraph API
-        const response = await axios.post(
-          `${effectiveUrl}/.api/graphql`,
-          { query: graphqlQuery, variables: { query: finalQuery } },
-          { headers }
+        // Execute the search using the Sourcegraph service
+        const response = await executeSourcegraphSearch(
+          finalQuery,
+          graphqlQuery,
+          { url: effectiveUrl, token: effectiveToken }
         );
         
-        if (response.data.errors) {
+        if (response.errors) {
           return {
             content: [{ 
               type: "text", 
-              text: `Sourcegraph API Error: ${JSON.stringify(response.data.errors)}` 
+              text: `Sourcegraph API Error: ${JSON.stringify(response.errors)}` 
             }],
             isError: true
           };
         }
         
-        // Format the results using the enhanced formatter
-        const results = response.data.data.search.results;
+        // Format the results
+        const results = response.data.search.results;
         const formattedResults = formatSearchResults(results, { query: finalQuery, type: 'diff' });
         
         return {
@@ -517,10 +369,10 @@ export function createServer() {
     }
   );
 
-  // Add a tool to search specifically in GitHub repositories
+  // Add a tool to search specifically in GitHub repositories - using direct Sourcegraph API
   server.tool(
     "search-github-repos",
-    "Search for code in specific GitHub repositories",
+    "Search for code, commits, or diffs specifically in GitHub repositories.\n\n    WHEN TO USE THIS TOOL:\n    - When you need to search within specific known GitHub repositories\n    - When searching across multiple GitHub repos simultaneously\n    - When you need targeted searches in open source projects\n    - When you want to limit searches to verified repositories\n\n    PARAMETER USAGE:\n    - query: What to search for (e.g., 'render function', 'authentication middleware')\n    - repos: Comma-separated list of GitHub repositories in 'owner/repo' format\n    - type: The type of search to perform ('file', 'commit', or 'diff')\n\n    REPOSITORY SPECIFICATION:\n    - Single repository: 'microsoft/typescript'\n    - Multiple repositories: 'facebook/react,angular/angular,vuejs/vue'\n    - Organization-wide: Use multiple specific repos instead of wildcards\n    \n    EXAMPLES:\n    - Find authentication code in React: query='authentication', repos='facebook/react'\n    - Find GraphQL usage across popular frameworks: query='graphql', repos='apollographql/apollo-client,graphql/graphql-js'\n    - Find recent security fixes: query='security fix', repos='kubernetes/kubernetes', type='commit'\n    \n    Notes:\n    - Format repositories exactly as they appear on GitHub (owner/repo)\n    - Searches within specified repos only, not forks or related projects\n    - Can be combined with any syntax from search-code, search-commits, and search-diffs",
     { 
       query: z.string().describe("Search query text"),
       repos: z.string().describe("Comma-separated list of GitHub repositories to search in (e.g., 'owner/repo1,owner/repo2')"),
@@ -548,84 +400,43 @@ export function createServer() {
         // Build the search query with repo filters
         const repoFilters = repoList.map(repo => `repo:^github\\.com/${repo}$`).join(' '); 
         
-        // Check if the query is natural language
-        let searchTerms = query;
-        const isNaturalLanguage = /^(find|show|get|search for|look for|what|where|how|when)/i.test(query);
+        // Build the final search query directly - no NL processing
+        const finalQuery = `${query} ${repoFilters} type:${type} count:20`;
         
-        if (isNaturalLanguage) {
-          try {
-            // Process through natural language query analyzer
-            const analyzed = await analyzeQuery(query);
-            searchTerms = analyzed.query;
-          } catch (nlError) {
-            console.error('Natural language processing failed, using original query:', nlError);
-          }
+        // Select appropriate GraphQL query based on search type
+        let graphqlQuery;
+        switch(type) {
+          case 'commit':
+            graphqlQuery = getCommitSearchQuery();
+            break;
+          case 'diff':
+            graphqlQuery = getDiffSearchQuery();
+            break;
+          case 'file':
+          default:
+            graphqlQuery = getFileSearchQuery();
+            break;
         }
         
-        // Build the final search query
-        const finalQuery = `${searchTerms} ${repoFilters} type:${type} count:20`;
-        
-        // The GraphQL query
-        const graphqlQuery = `
-          query GitHubRepoSearch($query: String!) {
-            search(query: $query, version: V3) {
-              results {
-                matchCount
-                results {
-                  __typename
-                  ... on FileMatch {
-                    repository { name }
-                    file { path }
-                    lineMatches {
-                      lineNumber
-                      preview
-                    }
-                  }
-                  ... on CommitSearchResult {
-                    commit {
-                      oid
-                      message
-                      author {
-                        person {
-                          name
-                          email
-                        }
-                        date
-                      }
-                      repository { name }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        `;
-        
-        // Headers for Sourcegraph API
-        const headers = {
-          'Authorization': `token ${effectiveToken}`,
-          'Content-Type': 'application/json'
-        };
-        
-        // Make the request to Sourcegraph API
-        const response = await axios.post(
-          `${effectiveUrl}/.api/graphql`,
-          { query: graphqlQuery, variables: { query: finalQuery } },
-          { headers }
+        // Execute the search using the Sourcegraph service
+        const response = await executeSourcegraphSearch(
+          finalQuery,
+          graphqlQuery,
+          { url: effectiveUrl, token: effectiveToken }
         );
         
-        if (response.data.errors) {
+        if (response.errors) {
           return {
             content: [{ 
               type: "text", 
-              text: `Sourcegraph API Error: ${JSON.stringify(response.data.errors)}` 
+              text: `Sourcegraph API Error: ${JSON.stringify(response.errors)}` 
             }],
             isError: true
           };
         }
         
-        // Format the results using the enhanced formatter
-        const results = response.data.data.search.results;
+        // Format the results
+        const results = response.data.search.results;
         const formattedResults = formatSearchResults(results, { query: finalQuery, type });
         
         return {
@@ -650,7 +461,7 @@ export function createServer() {
   // Add a natural language search tool
   server.tool(
     "natural-search",
-    "Search code repositories using natural language queries",
+    "Search code repositories using natural language queries instead of precise syntax.\n\n    WHEN TO USE THIS TOOL:\n    - When you want to search using plain English instead of specific query syntax\n    - When you're unsure of the exact Sourcegraph search syntax\n    - When you want to describe what you're looking for conceptually\n    - When you want automatic detection of search type (code, commits, diffs)\n\n    PARAMETER USAGE:\n    - query: Your search request in natural language (e.g., 'Find authentication code in React components')\n    - max_results: Optional limit on the number of results (default: 20)\n\n    NATURAL LANGUAGE EXAMPLES:\n    - 'Find all implementations of authentication in the frontend code'\n    - 'Show me commits by Sarah from last month related to the login system'\n    - 'Look for recent changes to the API error handling'\n    - 'Find code that handles file uploads in Python repositories'\n    \n    SUPPORTED CONCEPTS (AUTOMATICALLY DETECTED):\n    - Code patterns: 'Find code that validates user input'\n    - Specific authors: 'Show commits by John'\n    - Time periods: 'Find changes from last week'\n    - Repositories: 'Search in the React codebase'\n    - Languages: 'Find JavaScript code for authentication'\n    \n    Notes:\n    - This tool uses AI to convert your query into Sourcegraph syntax\n    - It automatically detects if you're looking for code, commits, or diffs\n    - You can freely mix concepts in a single query\n    - Results are formatted for readability with context",
     { 
       query: z.string().describe("Natural language query describing what you want to search for"),
       max_results: z.number().optional().describe("Maximum number of results to return (default: 20)")
@@ -682,7 +493,7 @@ export function createServer() {
   // Add a debug tool to list available tools and methods
   server.tool(
     "debug",
-    "Lists all available tools and methods",
+    "Lists all available tools and methods in the MCP server. Use this to discover capabilities.\n\n    WHEN TO USE THIS TOOL:\n    - When you need to see what tools are available in the server\n    - When you want to check which methods are supported\n    - When debugging or exploring the MCP server capabilities\n    - When you're unsure what functionality is available\n\n    The output includes:\n    - All registered tools with their names\n    - Available resources like URLs\n    - Registered prompts\n    - Supported MCP methods\n    \n    No parameters are required. Simply call the tool to get a complete listing.",
     {},
     async () => ({
       content: [

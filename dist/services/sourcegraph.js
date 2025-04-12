@@ -1,23 +1,68 @@
 "use strict";
+/**
+ * Sourcegraph API Service
+ * Handles direct interactions with the Sourcegraph API
+ */
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.searchSourcegraph = void 0;
+exports.getDiffSearchQuery = exports.getCommitSearchQuery = exports.getFileSearchQuery = exports.executeSourcegraphSearch = exports.searchSourcegraph = void 0;
 const axios_1 = __importDefault(require("axios"));
-const sgUrl = process.env.SOURCEGRAPH_URL;
-const sgToken = process.env.SOURCEGRAPH_TOKEN;
+const dotenv_1 = __importDefault(require("dotenv"));
+// Load environment variables
+dotenv_1.default.config();
+// Get Sourcegraph configuration from environment
+const getSourcegraphConfig = () => {
+    const url = process.env.SOURCEGRAPH_URL;
+    const token = process.env.SOURCEGRAPH_TOKEN;
+    if (!url || !token) {
+        throw new Error('Sourcegraph URL or token not configured. Please set SOURCEGRAPH_URL and SOURCEGRAPH_TOKEN environment variables.');
+    }
+    return { url, token };
+};
 /**
- * Execute a Sourcegraph search query (GraphQL).
- * Could be type:file, type:commit, or type:diff depending on user query.
- *
- * @param sgQuery e.g. 'repo:myorg/.* functionName type:file count:all'
+ * Search Sourcegraph with a query - for Express API routes
  */
-async function searchSourcegraph(sgQuery) {
-    const graphqlQuery = `
-    query CodeSearch($query: String!) {
+async function searchSourcegraph(query) {
+    const config = getSourcegraphConfig();
+    let graphqlQuery;
+    // Determine the appropriate query based on the search type
+    if (query.includes('type:commit')) {
+        graphqlQuery = getCommitSearchQuery();
+    }
+    else if (query.includes('type:diff')) {
+        graphqlQuery = getDiffSearchQuery();
+    }
+    else {
+        graphqlQuery = getFileSearchQuery();
+    }
+    return executeSourcegraphSearch(query, graphqlQuery, config);
+}
+exports.searchSourcegraph = searchSourcegraph;
+/**
+ * Execute a search query against the Sourcegraph API
+ */
+async function executeSourcegraphSearch(query, graphqlQuery, sourcegraphConfig) {
+    // Headers for Sourcegraph API
+    const headers = {
+        'Authorization': `token ${sourcegraphConfig.token}`,
+        'Content-Type': 'application/json'
+    };
+    // Make the request to Sourcegraph API
+    const response = await axios_1.default.post(`${sourcegraphConfig.url}/.api/graphql`, { query: graphqlQuery, variables: { query } }, { headers });
+    return response.data;
+}
+exports.executeSourcegraphSearch = executeSourcegraphSearch;
+/**
+ * Get GraphQL query for file search
+ */
+function getFileSearchQuery() {
+    return `
+    query FileSearch($query: String!) {
       search(query: $query, version: V3) {
         results {
+          matchCount
           results {
             __typename
             ... on FileMatch {
@@ -28,8 +73,26 @@ async function searchSourcegraph(sgQuery) {
                 preview
               }
             }
+          }
+        }
+      }
+    }
+  `;
+}
+exports.getFileSearchQuery = getFileSearchQuery;
+/**
+ * Get GraphQL query for commit search
+ */
+function getCommitSearchQuery() {
+    return `
+    query CommitSearch($query: String!) {
+      search(query: $query, version: V3) {
+        results {
+          matchCount
+          results {
+            __typename
             ... on CommitSearchResult {
-              commits {
+              commit {
                 oid
                 message
                 author {
@@ -39,97 +102,56 @@ async function searchSourcegraph(sgQuery) {
                   }
                   date
                 }
+                repository { name }
               }
-              diff {
-                fileDiffs {
-                  diff
-                  nodes {
-                    oldPath
-                    newPath
-                    hunks {
-                      body
-                      section
-                      oldRange { start, lines }
-                      newRange { start, lines }
-                    }
-                  }
-                }
-              }
-              refs {
-                name
-              }
-              repository { name }
             }
           }
         }
       }
     }
   `;
-    const headers = {
-        'Authorization': `token ${sgToken}`,
-        'Content-Type': 'application/json'
-    };
-    if (!sgUrl) {
-        console.error('SOURCEGRAPH_URL env var:', process.env.SOURCEGRAPH_URL);
-        throw new Error('SOURCEGRAPH_URL is not set');
-    }
-    if (!sgToken) {
-        throw new Error('SOURCEGRAPH_TOKEN is not set');
-    }
-    // Make sure the URL has the correct format
-    const baseUrl = sgUrl.endsWith('/') ? sgUrl.slice(0, -1) : sgUrl;
-    const response = await axios_1.default.post(`${baseUrl}/.api/graphql`, { query: graphqlQuery, variables: { query: sgQuery } }, { headers });
-    if (response.data.errors) {
-        throw new Error(`Sourcegraph GraphQL Error: ${JSON.stringify(response.data.errors)}`);
-    }
-    const rawResults = response.data.data.search.results.results;
-    const allResults = [];
-    for (const result of rawResults) {
-        switch (result.__typename) {
-            case 'FileMatch':
-                // type:file or basic code search
-                const repoName = result.repository.name;
-                const filePath = result.file.path;
-                for (const lineMatch of result.lineMatches) {
-                    allResults.push({
-                        type: 'file',
-                        repo: repoName,
-                        file: filePath,
-                        line: lineMatch.lineNumber,
-                        snippet: lineMatch.preview
-                    });
-                }
-                break;
-            case 'CommitSearchResult':
-                // type:commit or type:diff
-                const commits = result.commits;
-                const repo = result.repository.name;
-                for (const commit of commits) {
-                    const commitData = {
-                        type: 'commit',
-                        repo,
-                        commitID: commit.oid,
-                        commitMessage: commit.message,
-                        commitAuthor: commit.author.person.name,
-                        commitDate: commit.author.date
-                    };
-                    // If it's from a diff-based search, we can look at the diff content
-                    if (result.diff && result.diff.fileDiffs) {
-                        // This indicates a type:diff search or commits with diffs
-                        commitData.type = 'diff'; // we can classify as 'diff' if there's a diff
-                    }
-                    allResults.push(commitData);
-                }
-                break;
-            default:
-                // Other result types could appear, e.g. RepoMatch, SymbolMatch, etc.
-                allResults.push({
-                    type: 'other',
-                    repo: '',
-                });
-                break;
-        }
-    }
-    return allResults;
 }
-exports.searchSourcegraph = searchSourcegraph;
+exports.getCommitSearchQuery = getCommitSearchQuery;
+/**
+ * Get GraphQL query for diff search
+ */
+function getDiffSearchQuery() {
+    return `
+    query DiffSearch($query: String!) {
+      search(query: $query, version: V3) {
+        results {
+          matchCount
+          results {
+            __typename
+            ... on CommitSearchResult {
+              commit {
+                oid
+                message
+                author {
+                  person {
+                    name
+                    email
+                  }
+                  date
+                }
+                repository { name }
+              }
+              diff {
+                fileDiffs {
+                  oldPath
+                  newPath
+                  hunks {
+                    body
+                    oldRange { start, lines }
+                    newRange { start, lines }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+}
+exports.getDiffSearchQuery = getDiffSearchQuery;
