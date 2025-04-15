@@ -495,35 +495,46 @@ export function createServer() {
     "debug",
     "Lists all available tools and methods in the MCP server. Use this to discover capabilities.\n\n    WHEN TO USE THIS TOOL:\n    - When you need to see what tools are available in the server\n    - When you want to check which methods are supported\n    - When debugging or exploring the MCP server capabilities\n    - When you're unsure what functionality is available\n\n    The output includes:\n    - All registered tools with their names\n    - Available resources like URLs\n    - Registered prompts\n    - Supported MCP methods\n    \n    No parameters are required. Simply call the tool to get a complete listing.",
     {},
-    async () => ({
-      content: [
-        {
+    async () => {
+      const toolsList = [
+        "echo", 
+        "search-code", 
+        "search-commits", 
+        "search-diffs",
+        "search-github-repos",
+        "natural-search",
+        "test-nl-search",
+        "test-connection",
+        "nl-search-help", 
+        "debug",
+        "deep-code-researcher"
+      ];
+      
+      const resourcesList = [
+        "hello://sourcegraph",
+        "greeting://{name}"
+      ];
+      
+      const promptsList = [
+        "sourcegraph-assistant"
+      ];
+      
+      const methodsList = ["tools/invoke", "mcp/capabilities", "debug/info"];
+      
+      const info = {
+        tools: toolsList,
+        resources: resourcesList,
+        prompts: promptsList,
+        methods: methodsList
+      };
+      
+      return {
+        content: [{
           type: "text",
-          text: JSON.stringify({
-            tools: [
-              "echo", 
-              "search-code", 
-              "search-commits", 
-              "search-diffs",
-              "search-github-repos",
-              "natural-search",
-              "test-nl-search",
-              "test-connection",
-              "nl-search-help", 
-              "debug"
-            ],
-            resources: [
-              "hello://sourcegraph",
-              "greeting://{name}"
-            ],
-            prompts: [
-              "sourcegraph-assistant"
-            ],
-            methods: ["tools/invoke", "mcp/capabilities", "debug/info"]
-          }, null, 2),
-        },
-      ],
-    })
+          text: JSON.stringify(info, null, 2)
+        }]
+      };
+    }
   );
 
   // Add invoke method to the server for direct tool invocation
@@ -536,6 +547,29 @@ export function createServer() {
 
   // Add test tools for easier debugging and validation
   addTestTools(server);
+
+  // Deep code researcher tool for advanced code analysis
+  server.tool(
+    "deep-code-researcher",
+    "Conduct deep research on code patterns and architecture across repositories with advanced analysis capabilities.\n\n" +
+    "WHEN TO USE THIS TOOL:\n" +
+    "- When you need comprehensive understanding of complex codebases\n" +
+    "- When searching for patterns across multiple repositories\n" +
+    "- When analyzing code architecture and dependencies\n" +
+    "- When you need to understand implementation patterns for specific functionality",
+    {
+      query: z.string().describe("The research query or code pattern to analyze")
+    },
+    async ({ query }) => {
+      // Placeholder for implementation
+      return {
+        content: [{ 
+          type: "text", 
+          text: `Research query '${query}' processed. Implementation pending.` 
+        }]
+      };
+    }
+  );
 
   return server;
 }
