@@ -155,3 +155,18 @@ See [FIXED_MCP_INSPECTOR.md](./FIXED_MCP_INSPECTOR.md) for detailed troubleshoot
 - **API Connection**: Test basic Sourcegraph connectivity with the `test-connection` tool
 - **MCP Issues**: Run the debug server for clear logging of all requests and responses
 - **Query Conversion**: Use `test-nl-search` to see how queries are interpreted
+
+### Testing with mcp-inspector
+
+-- ``` mcp-inspectpor   ```
+
+Transport Type
+
+-- STDIO
+
+Command
+-- ```node```
+
+Arguments
+
+-- ```your-path/dist/stdio-server.js```
