@@ -18,10 +18,9 @@ router.post('/search', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Query is required' });
     }
 
-    // Handle natural language search
+    // Natural language search is disabled
     if (type === 'natural') {
-      const result = await server.invoke('natural-search', { query });
-      return res.json(result);
+      return res.status(400).json({ error: 'Natural language search is disabled' });
     }
     
     // Handle standard search

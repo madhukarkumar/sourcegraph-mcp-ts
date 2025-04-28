@@ -14,7 +14,7 @@ export function addTestTools(server: McpServer) {
   // Silent initialization - don't log to console as it breaks JSON responses
 
   // Add a test natural language search tool that explains what's happening
-  server.tool(
+  /*server.tool(
     "test-nl-search",
     "Test natural language search functionality with debugging information",
     { 
@@ -102,7 +102,7 @@ To perform the real search, use the 'natural-search' tool instead.
         };
       }
     }
-  );
+  );*/
 
   // Add a connection test tool
   server.tool(
@@ -170,7 +170,7 @@ To perform the real search, use the 'natural-search' tool instead.
   );
 
   // Add a quick test tool to explain how to use the natural language search
-  server.tool(
+  /*server.tool(
     "nl-search-help",
     "Get help on using natural language search",
     {},
@@ -209,7 +209,7 @@ To perform the real search, use the 'natural-search' tool instead.
         }]
       };
     }
-  );
+  );*/
 
   // Return the server with tools added
   return server;

@@ -7,9 +7,12 @@ exports.createServer = void 0;
 const mcp_js_1 = require("@modelcontextprotocol/sdk/server/mcp.js");
 const zod_1 = require("zod");
 const dotenv_1 = __importDefault(require("dotenv"));
-const natural_language_1 = require("./services/natural-language");
+// import { naturalLanguageSearch } from './services/natural-language';
 const formatter_1 = require("./utils/formatter");
 const sourcegraph_1 = require("./services/sourcegraph");
+const code_intelligence_1 = require("./services/code-intelligence");
+const repository_content_1 = require("./services/repository-content");
+const security_1 = require("./services/security");
 // Load environment variables
 dotenv_1.default.config();
 // Sourcegraph API configuration
@@ -371,11 +374,51 @@ function createServer() {
             };
         }
     });
-    // Add a natural language search tool
-    server.tool("natural-search", "Search code repositories using natural language queries instead of precise syntax.\n\n    WHEN TO USE THIS TOOL:\n    - When you want to search using plain English instead of specific query syntax\n    - When you're unsure of the exact Sourcegraph search syntax\n    - When you want to describe what you're looking for conceptually\n    - When you want automatic detection of search type (code, commits, diffs)\n\n    PARAMETER USAGE:\n    - query: Your search request in natural language (e.g., 'Find authentication code in React components')\n    - max_results: Optional limit on the number of results (default: 20)\n\n    NATURAL LANGUAGE EXAMPLES:\n    - 'Find all implementations of authentication in the frontend code'\n    - 'Show me commits by Sarah from last month related to the login system'\n    - 'Look for recent changes to the API error handling'\n    - 'Find code that handles file uploads in Python repositories'\n    \n    SUPPORTED CONCEPTS (AUTOMATICALLY DETECTED):\n    - Code patterns: 'Find code that validates user input'\n    - Specific authors: 'Show commits by John'\n    - Time periods: 'Find changes from last week'\n    - Repositories: 'Search in the React codebase'\n    - Languages: 'Find JavaScript code for authentication'\n    \n    Notes:\n    - This tool uses AI to convert your query into Sourcegraph syntax\n    - It automatically detects if you're looking for code, commits, or diffs\n    - You can freely mix concepts in a single query\n    - Results are formatted for readability with context", {
-        query: zod_1.z.string().describe("Natural language query describing what you want to search for"),
-        max_results: zod_1.z.number().optional().describe("Maximum number of results to return (default: 20)")
-    }, async ({ query, max_results }) => {
+    // Natural language search tool commented out
+    /*
+    server.tool(
+      "natural-search",
+      "Search code repositories using natural language queries instead of precise syntax.\n\n    WHEN TO USE THIS TOOL:\n    - When you want to search using plain English instead of specific query syntax\n    - When you're unsure of the exact Sourcegraph search syntax\n    - When you want to describe what you're looking for conceptually\n    - When you want automatic detection of search type (code, commits, diffs)\n\n    PARAMETER USAGE:\n    - query: Your search request in natural language (e.g., 'Find authentication code in React components')\n    - max_results: Optional limit on the number of results (default: 20)\n\n    NATURAL LANGUAGE EXAMPLES:\n    - 'Find all implementations of authentication in the frontend code'\n    - 'Show me commits by Sarah from last month related to the login system'\n    - 'Look for recent changes to the API error handling'\n    - 'Find code that handles file uploads in Python repositories'\n    \n    SUPPORTED CONCEPTS (AUTOMATICALLY DETECTED):\n    - Code patterns: 'Find code that validates user input'\n    - Specific authors: 'Show commits by John'\n    - Time periods: 'Find changes from last week'\n    - Repositories: 'Search in the React codebase'\n    - Languages: 'Find JavaScript code for authentication'\n    \n    Notes:\n    - This tool uses AI to convert your query into Sourcegraph syntax\n    - It automatically detects if you're looking for code, commits, or diffs\n    - You can freely mix concepts in a single query\n    - Results are formatted for readability with context",
+      {
+        query: z.string().describe("Natural language query describing what you want to search for"),
+        max_results: z.number().optional().describe("Maximum number of results to return (default: 20)")
+      },
+      async ({ query, max_results }) => {
+        // Implementation commented out
+        return {
+          content: [{
+            type: "text",
+            text: "Natural language search is disabled."
+          }]
+        };
+      }
+    );
+    */
+    // Add get-hover-documentation tool
+    server.tool("get-hover-documentation", "Get hover documentation and type information for a symbol.\n\n" +
+        "WHEN TO USE THIS TOOL:\n" +
+        "- When you need to see the documentation for a specific function, variable, or class\n" +
+        "- When you want to check the type information for a variable or expression\n" +
+        "- When you need quick information about a symbol without navigating to its definition\n" +
+        "- When exploring unfamiliar code to understand how components work\n\n" +
+        "PARAMETER USAGE:\n" +
+        "- repository: The full repository name (e.g., 'github.com/owner/repo')\n" +
+        "- path: The file path where the symbol appears (e.g., 'src/main.js')\n" +
+        "- line: The zero-indexed line number where the symbol appears\n" +
+        "- character: The zero-indexed character position of the symbol on that line\n\n" +
+        "IMPORTANT NOTES:\n" +
+        "- Requires LSIF data to be available in Sourcegraph (precise code intelligence)\n" +
+        "- For accurate results, the repository must be properly indexed in Sourcegraph\n" +
+        "- Line and character positions are zero-indexed (unlike editors which often use 1-indexed)\n\n" +
+        "EXAMPLES:\n" +
+        "- Get information about a function: { repository: 'github.com/golang/go', path: 'src/net/http/server.go', line: 142, character: 15 }\n" +
+        "- Check a variable's type: { repository: 'github.com/microsoft/typescript', path: 'src/compiler/program.ts', line: 124, character: 30 }\n\n" +
+        "The results will show the documentation and type information for the symbol at the specified position.", {
+        repository: zod_1.z.string().describe("The repository name (e.g. github.com/owner/repo)"),
+        path: zod_1.z.string().describe("The file path within the repository"),
+        line: zod_1.z.number().describe("Zero-indexed line number of the symbol"),
+        character: zod_1.z.number().describe("Zero-indexed character position of the symbol")
+    }, async ({ repository, path, line, character }) => {
         // Validate Sourcegraph credentials
         const effectiveUrl = sgUrl || process.env.SOURCEGRAPH_URL;
         const effectiveToken = sgToken || process.env.SOURCEGRAPH_TOKEN;
@@ -388,13 +431,618 @@ function createServer() {
                 isError: true
             };
         }
-        const result = await (0, natural_language_1.naturalLanguageSearch)(query, {
-            url: effectiveUrl,
-            token: effectiveToken
-        });
-        return result;
+        try {
+            // Get the hover query
+            const graphqlQuery = (0, code_intelligence_1.getHoverQuery)();
+            // Execute the query
+            const response = await (0, code_intelligence_1.executeSourcegraphQuery)(graphqlQuery, { repository, path, line, character }, { url: effectiveUrl, token: effectiveToken });
+            if (response.errors) {
+                return {
+                    content: [{
+                            type: "text",
+                            text: `Sourcegraph API Error: ${JSON.stringify(response.errors)}`
+                        }],
+                    isError: true
+                };
+            }
+            // Format the results
+            const hoverData = response.data?.repository?.commit?.blob?.lsif?.hover;
+            if (!hoverData) {
+                return {
+                    content: [{
+                            type: "text",
+                            text: "No hover documentation found or LSIF data not available for this file."
+                        }]
+                };
+            }
+            let result = "## Hover Documentation\n\n";
+            if (hoverData.markdown?.text) {
+                result += `${hoverData.markdown.text}\n\n`;
+            }
+            else if (hoverData.plainText) {
+                result += `\`\`\`\n${hoverData.plainText}\n\`\`\`\n\n`;
+            }
+            else {
+                result += "No documentation available for this symbol.\n\n";
+            }
+            if (hoverData.range) {
+                const startLine = hoverData.range.start.line + 1;
+                const startChar = hoverData.range.start.character + 1;
+                const endLine = hoverData.range.end.line + 1;
+                const endChar = hoverData.range.end.character + 1;
+                result += `**Symbol Range:** Line ${startLine}:${startChar} to ${endLine}:${endChar}\n`;
+            }
+            return {
+                content: [{
+                        type: "text",
+                        text: result
+                    }]
+            };
+        }
+        catch (error) {
+            return {
+                content: [{
+                        type: "text",
+                        text: `Error getting hover documentation: ${error.message || 'Unknown error'}`
+                    }],
+                isError: true
+            };
+        }
+    });
+    // Add get-document-symbols tool
+    server.tool("get-document-symbols", "Get all symbols (functions, classes, variables, etc.) in a file.\n\n" +
+        "WHEN TO USE THIS TOOL:\n" +
+        "- When you need to see a structural overview of a file\n" +
+        "- When looking for specific functions or classes in a large file\n" +
+        "- When analyzing the organization and hierarchy of code in a file\n" +
+        "- When you want to quickly understand the contents of a file without reading all the code\n\n" +
+        "PARAMETER USAGE:\n" +
+        "- repository: The full repository name (e.g., 'github.com/owner/repo')\n" +
+        "- path: The file path to analyze (e.g., 'src/main.js')\n\n" +
+        "IMPORTANT NOTES:\n" +
+        "- Requires LSIF data to be available in Sourcegraph (precise code intelligence)\n" +
+        "- For accurate results, the repository must be properly indexed in Sourcegraph\n" +
+        "- Symbol kinds vary by language (e.g., classes, methods, functions, variables)\n" +
+        "- Symbols will be organized hierarchically when possible (e.g., methods inside classes)\n\n" +
+        "EXAMPLES:\n" +
+        "- Get symbols in a JavaScript file: { repository: 'github.com/facebook/react', path: 'packages/react/src/React.js' }\n" +
+        "- Analyze a complex TypeScript file: { repository: 'github.com/microsoft/vscode', path: 'src/vs/editor/editor.api.ts' }\n\n" +
+        "The results will show all symbols in the file, their types, and their locations, organized hierarchically when possible.", {
+        repository: zod_1.z.string().describe("The repository name (e.g. github.com/owner/repo)"),
+        path: zod_1.z.string().describe("The file path within the repository")
+    }, async ({ repository, path }) => {
+        // Validate Sourcegraph credentials
+        const effectiveUrl = sgUrl || process.env.SOURCEGRAPH_URL;
+        const effectiveToken = sgToken || process.env.SOURCEGRAPH_TOKEN;
+        if (!effectiveUrl || !effectiveToken) {
+            return {
+                content: [{
+                        type: "text",
+                        text: "Error: Sourcegraph URL or token not configured. Please set SOURCEGRAPH_URL and SOURCEGRAPH_TOKEN environment variables."
+                    }],
+                isError: true
+            };
+        }
+        try {
+            // Get the document symbols query
+            const graphqlQuery = (0, code_intelligence_1.getDocumentSymbolsQuery)();
+            // Execute the query
+            const response = await (0, code_intelligence_1.executeSourcegraphQuery)(graphqlQuery, { repository, path }, { url: effectiveUrl, token: effectiveToken });
+            if (response.errors) {
+                return {
+                    content: [{
+                            type: "text",
+                            text: `Sourcegraph API Error: ${JSON.stringify(response.errors)}`
+                        }],
+                    isError: true
+                };
+            }
+            // Format the results
+            const symbolsData = response.data?.repository?.commit?.blob?.lsif?.documentSymbols?.symbols;
+            if (!symbolsData || symbolsData.length === 0) {
+                return {
+                    content: [{
+                            type: "text",
+                            text: "No symbols found or LSIF data not available for this file."
+                        }]
+                };
+            }
+            let result = `## Symbols in ${repository}:${path}\n\n`;
+            // Map for symbol kinds to more readable formats
+            const kindMap = {
+                'File': '📄',
+                'Module': '📦',
+                'Namespace': '🔠',
+                'Package': '📦',
+                'Class': '🔶',
+                'Method': '🔹',
+                'Property': '🔸',
+                'Field': '🔸',
+                'Constructor': '🏗️',
+                'Enum': '🔢',
+                'Interface': '🔷',
+                'Function': '⚙️',
+                'Variable': '📌',
+                'Constant': '🔒',
+                'String': '🔤',
+                'Number': '🔢',
+                'Boolean': '✓❌',
+                'Array': '📋',
+                'Object': '📦',
+                'Key': '🔑',
+                'Null': '⭕',
+                'EnumMember': '🔹',
+                'Struct': '🏛️',
+                'Event': '⚡',
+                'Operator': '➗',
+                'TypeParameter': '🆃'
+            };
+            // Recursively format symbols
+            const formatSymbols = (symbols, indent = 0) => {
+                let result = '';
+                symbols.forEach(symbol => {
+                    const kind = symbol.kind || 'Unknown';
+                    const icon = kindMap[kind] || '•';
+                    const startLine = symbol.location?.range?.start?.line + 1 || '?';
+                    const indentStr = '  '.repeat(indent);
+                    result += `${indentStr}${icon} **${symbol.name}** (${kind}, line ${startLine})\n`;
+                    if (symbol.children && symbol.children.length > 0) {
+                        result += formatSymbols(symbol.children, indent + 1);
+                    }
+                });
+                return result;
+            };
+            result += formatSymbols(symbolsData);
+            return {
+                content: [{
+                        type: "text",
+                        text: result
+                    }]
+            };
+        }
+        catch (error) {
+            return {
+                content: [{
+                        type: "text",
+                        text: `Error getting document symbols: ${error.message || 'Unknown error'}`
+                    }],
+                isError: true
+            };
+        }
     });
     // Add a debug tool to list available tools and methods
+    // Add get-file-content tool
+    server.tool("get-file-content", "Get the raw content of a file from any repository.\n\n" +
+        "WHEN TO USE THIS TOOL:\n" +
+        "- When you need to retrieve the contents of a specific file\n" +
+        "- When analyzing a file's implementation details\n" +
+        "- When you want to understand configuration files or scripts\n" +
+        "- When you need to see how a specific file is structured\n\n" +
+        "PARAMETER USAGE:\n" +
+        "- repository: The full repository name (e.g., 'github.com/owner/repo')\n" +
+        "- path: The file path within the repository (e.g., 'src/main.js')\n" +
+        "- revision: Optional git revision/branch/tag (e.g., 'main', 'v1.0.0', or a commit SHA)\n\n" +
+        "IMPORTANT NOTES:\n" +
+        "- Binary files will not display their content properly\n" +
+        "- Very large files may be truncated\n" +
+        "- For privacy and security, access is limited to repositories you have permissions for\n\n" +
+        "EXAMPLES:\n" +
+        "- Get a specific file: { repository: 'github.com/golang/go', path: 'src/net/http/server.go' }\n" +
+        "- Get a file from a specific branch: { repository: 'github.com/facebook/react', path: 'packages/react/src/React.js', revision: 'experimental' }\n\n" +
+        "The results will show the file's content with syntax highlighting for the appropriate language.", {
+        repository: zod_1.z.string().describe("The repository name (e.g. github.com/owner/repo)"),
+        path: zod_1.z.string().describe("The file path within the repository"),
+        revision: zod_1.z.string().optional().describe("Optional git revision/branch/tag")
+    }, async ({ repository, path, revision }) => {
+        // Validate Sourcegraph credentials
+        const effectiveUrl = sgUrl || process.env.SOURCEGRAPH_URL;
+        const effectiveToken = sgToken || process.env.SOURCEGRAPH_TOKEN;
+        if (!effectiveUrl || !effectiveToken) {
+            return {
+                content: [{
+                        type: "text",
+                        text: "Error: Sourcegraph URL or token not configured. Please set SOURCEGRAPH_URL and SOURCEGRAPH_TOKEN environment variables."
+                    }],
+                isError: true
+            };
+        }
+        try {
+            // Get the file content query
+            const graphqlQuery = (0, repository_content_1.getFileContentQuery)();
+            // Execute the query
+            const response = await (0, code_intelligence_1.executeSourcegraphQuery)(graphqlQuery, { repository, path, revision }, { url: effectiveUrl, token: effectiveToken });
+            if (response.errors) {
+                return {
+                    content: [{
+                            type: "text",
+                            text: `Sourcegraph API Error: ${JSON.stringify(response.errors)}`
+                        }],
+                    isError: true
+                };
+            }
+            // Format the results
+            const formattedResults = (0, repository_content_1.formatFileContentResults)(response.data, { repository, path, revision });
+            return {
+                content: [{
+                        type: "text",
+                        text: formattedResults
+                    }]
+            };
+        }
+        catch (error) {
+            return {
+                content: [{
+                        type: "text",
+                        text: `Error getting file content: ${error.message || 'Unknown error'}`
+                    }],
+                isError: true
+            };
+        }
+    });
+    // Add get-file-blame tool
+    server.tool("get-file-blame", "Get git blame information for a file.\n\n" +
+        "WHEN TO USE THIS TOOL:\n" +
+        "- When you need to see who last modified a specific section of a file\n" +
+        "- When investigating when and why a particular change was made\n" +
+        "- When tracking the history and ownership of code\n" +
+        "- When you want to understand how a file evolved over time\n\n" +
+        "PARAMETER USAGE:\n" +
+        "- repository: The full repository name (e.g., 'github.com/owner/repo')\n" +
+        "- path: The file path within the repository (e.g., 'src/main.js')\n" +
+        "- startLine: Optional zero-indexed start line for partial file blame (default: 0)\n" +
+        "- endLine: Optional zero-indexed end line for partial file blame (default: 100)\n\n" +
+        "IMPORTANT NOTES:\n" +
+        "- Line numbers are zero-indexed (unlike editors which often use 1-indexed)\n" +
+        "- For large files, consider specifying a line range to improve performance\n" +
+        "- The maximum recommended line range is 200 lines\n\n" +
+        "EXAMPLES:\n" +
+        "- Get blame for a specific file section: { repository: 'github.com/golang/go', path: 'src/net/http/server.go', startLine: 100, endLine: 150 }\n" +
+        "- Get blame for the beginning of a file: { repository: 'github.com/facebook/react', path: 'packages/react/src/React.js' }\n\n" +
+        "The results will show line ranges, authors, dates, and commit messages for each section of the file.", {
+        repository: zod_1.z.string().describe("The repository name (e.g. github.com/owner/repo)"),
+        path: zod_1.z.string().describe("The file path within the repository"),
+        startLine: zod_1.z.number().default(0).describe("Optional zero-indexed start line for partial file blame"),
+        endLine: zod_1.z.number().default(100).describe("Optional zero-indexed end line for partial file blame")
+    }, async ({ repository, path, startLine, endLine }) => {
+        // Validate Sourcegraph credentials
+        const effectiveUrl = sgUrl || process.env.SOURCEGRAPH_URL;
+        const effectiveToken = sgToken || process.env.SOURCEGRAPH_TOKEN;
+        if (!effectiveUrl || !effectiveToken) {
+            return {
+                content: [{
+                        type: "text",
+                        text: "Error: Sourcegraph URL or token not configured. Please set SOURCEGRAPH_URL and SOURCEGRAPH_TOKEN environment variables."
+                    }],
+                isError: true
+            };
+        }
+        try {
+            // Get the file blame query
+            const graphqlQuery = (0, repository_content_1.getFileBlameQuery)();
+            // Execute the query
+            const response = await (0, code_intelligence_1.executeSourcegraphQuery)(graphqlQuery, { repository, path, startLine, endLine }, { url: effectiveUrl, token: effectiveToken });
+            if (response.errors) {
+                return {
+                    content: [{
+                            type: "text",
+                            text: `Sourcegraph API Error: ${JSON.stringify(response.errors)}`
+                        }],
+                    isError: true
+                };
+            }
+            // Format the results
+            const formattedResults = (0, repository_content_1.formatFileBlameResults)(response.data, { repository, path, startLine, endLine });
+            return {
+                content: [{
+                        type: "text",
+                        text: formattedResults
+                    }]
+            };
+        }
+        catch (error) {
+            return {
+                content: [{
+                        type: "text",
+                        text: `Error getting file blame: ${error.message || 'Unknown error'}`
+                    }],
+                isError: true
+            };
+        }
+    });
+    // Add lookup-cve tool
+    server.tool("lookup-cve", "Search for CVEs affecting repositories or packages.\n\n" +
+        "WHEN TO USE THIS TOOL:\n" +
+        "- When you need to check if a specific CVE affects a repository\n" +
+        "- When you want to find vulnerabilities related to a specific package\n" +
+        "- When investigating security issues in a codebase\n" +
+        "- When performing security audits for packages or repositories\n\n" +
+        "PARAMETER USAGE:\n" +
+        "- cveId: Optional specific CVE ID to look up (e.g., 'CVE-2023-1234')\n" +
+        "- package: Optional package name to check for vulnerabilities (e.g., 'lodash')\n" +
+        "- repository: Optional repository name to check for vulnerabilities (e.g., 'github.com/owner/repo')\n\n" +
+        "IMPORTANT NOTES:\n" +
+        "- At least one parameter must be provided (cveId, package, or repository)\n" +
+        "- Results include severity levels, affected versions, and remediation guidance when available\n" +
+        "- Enterprise features may provide more detailed results\n\n" +
+        "EXAMPLES:\n" +
+        "- Look up a specific CVE: { cveId: 'CVE-2023-1234' }\n" +
+        "- Check vulnerabilities for a package: { package: 'lodash' }\n" +
+        "- Check vulnerabilities in a repository: { repository: 'github.com/facebook/react' }\n\n" +
+        "The results will show detailed information about matching vulnerabilities including severity, affected versions, and available fixes.", {
+        cveId: zod_1.z.string().optional().describe("Optional specific CVE ID to look up"),
+        package: zod_1.z.string().optional().describe("Optional package name to check"),
+        repository: zod_1.z.string().optional().describe("Optional repository name")
+    }, async ({ cveId, package: packageName, repository }) => {
+        // Validate Sourcegraph credentials
+        const effectiveUrl = sgUrl || process.env.SOURCEGRAPH_URL;
+        const effectiveToken = sgToken || process.env.SOURCEGRAPH_TOKEN;
+        if (!effectiveUrl || !effectiveToken) {
+            return {
+                content: [{
+                        type: "text",
+                        text: "Error: Sourcegraph URL or token not configured. Please set SOURCEGRAPH_URL and SOURCEGRAPH_TOKEN environment variables."
+                    }],
+                isError: true
+            };
+        }
+        // Require at least one parameter
+        if (!cveId && !packageName && !repository) {
+            return {
+                content: [{
+                        type: "text",
+                        text: "Error: At least one parameter (cveId, package, or repository) must be provided."
+                    }],
+                isError: true
+            };
+        }
+        try {
+            // Get the CVE lookup query
+            const graphqlQuery = (0, security_1.getCVELookupQuery)();
+            // Execute the query
+            const response = await (0, code_intelligence_1.executeSourcegraphQuery)(graphqlQuery, {
+                cveId: cveId || null,
+                package: packageName || null,
+                repository: repository || null,
+                limit: 50
+            }, { url: effectiveUrl, token: effectiveToken });
+            if (response.errors) {
+                return {
+                    content: [{
+                            type: "text",
+                            text: `Sourcegraph API Error: ${JSON.stringify(response.errors)}`
+                        }],
+                    isError: true
+                };
+            }
+            // Format the results
+            const formattedResults = (0, security_1.formatCVELookupResults)(response.data, { cveId, package: packageName, repository });
+            return {
+                content: [{
+                        type: "text",
+                        text: formattedResults
+                    }]
+            };
+        }
+        catch (error) {
+            return {
+                content: [{
+                        type: "text",
+                        text: `Error looking up CVE: ${error.message || 'Unknown error'}`
+                    }],
+                isError: true
+            };
+        }
+    });
+    // Add lookup-package-vulnerability tool
+    server.tool("lookup-package-vulnerability", "Check if specific packages have known vulnerabilities.\n\n" +
+        "WHEN TO USE THIS TOOL:\n" +
+        "- When you need to check if a package has known security vulnerabilities\n" +
+        "- When you want to audit a specific package version for security issues\n" +
+        "- When investigating dependency security before adding to a project\n" +
+        "- When checking if a package needs updating for security reasons\n\n" +
+        "PARAMETER USAGE:\n" +
+        "- package: The package name to check (e.g., 'lodash', 'react', 'django')\n" +
+        "- version: Optional specific package version to check (e.g., '4.17.20')\n\n" +
+        "IMPORTANT NOTES:\n" +
+        "- Without a version, all vulnerabilities for any version will be returned\n" +
+        "- Results include severity levels, affected versions, and remediation guidance\n" +
+        "- Different ecosystems (npm, PyPI, etc.) are supported\n\n" +
+        "EXAMPLES:\n" +
+        "- Check all vulnerabilities for a package: { package: 'lodash' }\n" +
+        "- Check vulnerabilities for a specific version: { package: 'react', version: '16.8.0' }\n\n" +
+        "The results will show detailed information about matching vulnerabilities including severity, affected versions, and available fixes.", {
+        package: zod_1.z.string().describe("Package name (e.g., 'lodash')"),
+        version: zod_1.z.string().optional().describe("Optional package version")
+    }, async ({ package: packageName, version }) => {
+        // Validate Sourcegraph credentials
+        const effectiveUrl = sgUrl || process.env.SOURCEGRAPH_URL;
+        const effectiveToken = sgToken || process.env.SOURCEGRAPH_TOKEN;
+        if (!effectiveUrl || !effectiveToken) {
+            return {
+                content: [{
+                        type: "text",
+                        text: "Error: Sourcegraph URL or token not configured. Please set SOURCEGRAPH_URL and SOURCEGRAPH_TOKEN environment variables."
+                    }],
+                isError: true
+            };
+        }
+        try {
+            // Get the package vulnerability query
+            const graphqlQuery = (0, security_1.getPackageVulnerabilityQuery)();
+            // Execute the query
+            const response = await (0, code_intelligence_1.executeSourcegraphQuery)(graphqlQuery, {
+                package: packageName,
+                version: version || null,
+                limit: 50
+            }, { url: effectiveUrl, token: effectiveToken });
+            if (response.errors) {
+                return {
+                    content: [{
+                            type: "text",
+                            text: `Sourcegraph API Error: ${JSON.stringify(response.errors)}`
+                        }],
+                    isError: true
+                };
+            }
+            // Format the results
+            const formattedResults = (0, security_1.formatPackageVulnerabilityResults)(response.data, { package: packageName, version });
+            return {
+                content: [{
+                        type: "text",
+                        text: formattedResults
+                    }]
+            };
+        }
+        catch (error) {
+            return {
+                content: [{
+                        type: "text",
+                        text: `Error looking up package vulnerabilities: ${error.message || 'Unknown error'}`
+                    }],
+                isError: true
+            };
+        }
+    });
+    // Add search-exploits tool
+    server.tool("search-exploits", "Search for exploit code for known vulnerabilities.\n\n" +
+        "WHEN TO USE THIS TOOL:\n" +
+        "- When you need to assess the risk of a CVE by finding available exploits\n" +
+        "- When researching how a vulnerability works\n" +
+        "- When checking if a vulnerability has public proof-of-concept code\n" +
+        "- When investigating security incidents related to specific CVEs\n\n" +
+        "PARAMETER USAGE:\n" +
+        "- cveId: The CVE ID to search for exploits (e.g., 'CVE-2023-1234')\n\n" +
+        "IMPORTANT NOTES:\n" +
+        "- Results may include proof-of-concept code, exploits, or security research\n" +
+        "- This tool searches across all indexed repositories\n" +
+        "- For security research purposes only\n\n" +
+        "EXAMPLES:\n" +
+        "- Find exploits for a CVE: { cveId: 'CVE-2023-1234' }\n" +
+        "- Research a well-known vulnerability: { cveId: 'CVE-2021-44228' } (Log4Shell)\n\n" +
+        "The results will show code references that mention or implement exploits for the specified CVE.", {
+        cveId: zod_1.z.string().describe("CVE ID to search for exploits")
+    }, async ({ cveId }) => {
+        // Validate Sourcegraph credentials
+        const effectiveUrl = sgUrl || process.env.SOURCEGRAPH_URL;
+        const effectiveToken = sgToken || process.env.SOURCEGRAPH_TOKEN;
+        if (!effectiveUrl || !effectiveToken) {
+            return {
+                content: [{
+                        type: "text",
+                        text: "Error: Sourcegraph URL or token not configured. Please set SOURCEGRAPH_URL and SOURCEGRAPH_TOKEN environment variables."
+                    }],
+                isError: true
+            };
+        }
+        try {
+            // Build the search query for exploits
+            const searchQuery = (0, security_1.buildExploitSearchQuery)(cveId);
+            // Get the file search GraphQL query
+            const graphqlQuery = (0, sourcegraph_1.getFileSearchQuery)();
+            // Execute the search
+            const response = await (0, sourcegraph_1.executeSourcegraphSearch)(searchQuery, graphqlQuery, { url: effectiveUrl, token: effectiveToken });
+            if (response.errors) {
+                return {
+                    content: [{
+                            type: "text",
+                            text: `Sourcegraph API Error: ${JSON.stringify(response.errors)}`
+                        }],
+                    isError: true
+                };
+            }
+            // Format the results
+            const results = response.data.search.results;
+            const formattedResults = (0, formatter_1.formatSearchResults)(results, { query: searchQuery, type: 'file' });
+            // Add a header specific to exploits
+            const header = `## Exploit Search Results for ${cveId}\n\nSearched for: ${searchQuery}\n\n`;
+            return {
+                content: [{
+                        type: "text",
+                        text: header + formattedResults
+                    }]
+            };
+        }
+        catch (error) {
+            return {
+                content: [{
+                        type: "text",
+                        text: `Error searching for exploits: ${error.message || 'Unknown error'}`
+                    }],
+                isError: true
+            };
+        }
+    });
+    // Add find-vendor-advisory tool
+    server.tool("find-vendor-advisory", "Find vendor security advisories.\n\n" +
+        "WHEN TO USE THIS TOOL:\n" +
+        "- When you need to find official security advisories from vendors\n" +
+        "- When researching how vendors have addressed specific security issues\n" +
+        "- When looking for remediation guidance for security vulnerabilities\n" +
+        "- When investigating security patches for specific products\n\n" +
+        "PARAMETER USAGE:\n" +
+        "- vendor: The vendor name (e.g., 'Microsoft', 'Apache', 'Oracle')\n" +
+        "- product: The product name (e.g., 'Windows', 'Log4j', 'MySQL')\n\n" +
+        "IMPORTANT NOTES:\n" +
+        "- Results include security advisories, bulletins, and announcements\n" +
+        "- More specific vendor and product names yield better results\n" +
+        "- Results are sourced from repositories that may contain security advisories\n\n" +
+        "EXAMPLES:\n" +
+        "- Find Microsoft Exchange advisories: { vendor: 'Microsoft', product: 'Exchange' }\n" +
+        "- Find Apache Log4j advisories: { vendor: 'Apache', product: 'Log4j' }\n\n" +
+        "The results will show security advisories, bulletins, and announcements from the specified vendor about the product.", {
+        vendor: zod_1.z.string().describe("Vendor name"),
+        product: zod_1.z.string().describe("Product name")
+    }, async ({ vendor, product }) => {
+        // Validate Sourcegraph credentials
+        const effectiveUrl = sgUrl || process.env.SOURCEGRAPH_URL;
+        const effectiveToken = sgToken || process.env.SOURCEGRAPH_TOKEN;
+        if (!effectiveUrl || !effectiveToken) {
+            return {
+                content: [{
+                        type: "text",
+                        text: "Error: Sourcegraph URL or token not configured. Please set SOURCEGRAPH_URL and SOURCEGRAPH_TOKEN environment variables."
+                    }],
+                isError: true
+            };
+        }
+        try {
+            // Build the search query for vendor advisories
+            const searchQuery = (0, security_1.buildVendorAdvisorySearchQuery)(vendor, product);
+            // Get the file search GraphQL query
+            const graphqlQuery = (0, sourcegraph_1.getFileSearchQuery)();
+            // Execute the search
+            const response = await (0, sourcegraph_1.executeSourcegraphSearch)(searchQuery, graphqlQuery, { url: effectiveUrl, token: effectiveToken });
+            if (response.errors) {
+                return {
+                    content: [{
+                            type: "text",
+                            text: `Sourcegraph API Error: ${JSON.stringify(response.errors)}`
+                        }],
+                    isError: true
+                };
+            }
+            // Format the results
+            const results = response.data.search.results;
+            const formattedResults = (0, formatter_1.formatSearchResults)(results, { query: searchQuery, type: 'file' });
+            // Add a header specific to vendor advisories
+            const header = `## Security Advisories for ${vendor} ${product}\n\nSearched for: ${searchQuery}\n\n`;
+            return {
+                content: [{
+                        type: "text",
+                        text: header + formattedResults
+                    }]
+            };
+        }
+        catch (error) {
+            return {
+                content: [{
+                        type: "text",
+                        text: `Error finding vendor advisories: ${error.message || 'Unknown error'}`
+                    }],
+                isError: true
+            };
+        }
+    });
     server.tool("debug", "Lists all available tools and methods in the MCP server. Use this to discover capabilities.\n\n    WHEN TO USE THIS TOOL:\n    - When you need to see what tools are available in the server\n    - When you want to check which methods are supported\n    - When debugging or exploring the MCP server capabilities\n    - When you're unsure what functionality is available\n\n    The output includes:\n    - All registered tools with their names\n    - Available resources like URLs\n    - Registered prompts\n    - Supported MCP methods\n    \n    No parameters are required. Simply call the tool to get a complete listing.", {}, async () => {
         const toolsList = [
             "echo",
@@ -402,12 +1050,23 @@ function createServer() {
             "search-commits",
             "search-diffs",
             "search-github-repos",
-            "natural-search",
-            "test-nl-search",
+            // "natural-search",
+            // "test-nl-search",
             "test-connection",
-            "nl-search-help",
+            // "nl-search-help", 
             "debug",
-            "deep-code-researcher"
+            "deep-code-researcher",
+            "get-definition",
+            "find-references",
+            "find-implementations",
+            "get-hover-documentation",
+            "get-document-symbols",
+            "get-file-content",
+            "get-file-blame",
+            "lookup-cve",
+            "lookup-package-vulnerability",
+            "search-exploits",
+            "find-vendor-advisory"
         ];
         const resourcesList = [
             "hello://sourcegraph",
@@ -446,8 +1105,11 @@ function createServer() {
         "- When searching for patterns across multiple repositories\n" +
         "- When analyzing code architecture and dependencies\n" +
         "- When you need to understand implementation patterns for specific functionality", {
-        query: zod_1.z.string().describe("The research query or code pattern to analyze")
-    }, async ({ query }) => {
+        query: zod_1.z.string().describe("The research query or code pattern to analyze"),
+        language: zod_1.z.string().optional().describe("Optional language filter (e.g., 'javascript', 'go', 'python')"),
+        repo: zod_1.z.string().optional().describe("Optional repository filter (e.g., 'github.com/owner/repo')"),
+        limit: zod_1.z.number().optional().describe("Maximum number of results to return (default: 20)")
+    }, async ({ query, language, repo, limit }) => {
         // Placeholder for implementation
         return {
             content: [{
@@ -455,6 +1117,225 @@ function createServer() {
                     text: `Research query '${query}' processed. Implementation pending.`
                 }]
         };
+    });
+    // Code Intelligence: get-definition tool
+    server.tool("get-definition", "Find the definition of a symbol in code.\n\n" +
+        "WHEN TO USE THIS TOOL:\n" +
+        "- When you need to find where a function, variable, class, or other symbol is defined\n" +
+        "- When you want to understand the origin and implementation of a specific code element\n" +
+        "- When navigating unfamiliar code to understand its structure\n" +
+        "- When verifying the actual implementation matches documentation\n\n" +
+        "PARAMETER USAGE:\n" +
+        "- repository: The full repository name (e.g., 'github.com/owner/repo')\n" +
+        "- path: The file path where the symbol is being used (e.g., 'src/main.js')\n" +
+        "- line: The zero-indexed line number where the symbol appears\n" +
+        "- character: The zero-indexed character position of the symbol on that line\n\n" +
+        "IMPORTANT NOTES:\n" +
+        "- Requires LSIF data to be available in Sourcegraph (precise code intelligence)\n" +
+        "- For accurate results, the repository must be properly indexed in Sourcegraph\n" +
+        "- Line and character positions are zero-indexed (unlike editors which often use 1-indexed)\n\n" +
+        "EXAMPLES:\n" +
+        "- Find where a function is defined: { repository: 'github.com/golang/go', path: 'src/net/http/server.go', line: 142, character: 15 }\n" +
+        "- Look up a class definition: { repository: 'github.com/typescript-eslint/typescript-eslint', path: 'packages/eslint-plugin/src/rules/indent.ts', line: 24, character: 10 }\n\n" +
+        "The results will show the location of the definition, and may include documentation/type information if available.", {
+        repository: zod_1.z.string().describe("The repository name (e.g. github.com/owner/repo)"),
+        path: zod_1.z.string().describe("The file path within the repository"),
+        line: zod_1.z.number().describe("Zero-indexed line number of the symbol"),
+        character: zod_1.z.number().describe("Zero-indexed character position of the symbol")
+    }, async ({ repository, path, line, character }) => {
+        // Validate Sourcegraph credentials
+        const effectiveUrl = sgUrl || process.env.SOURCEGRAPH_URL;
+        const effectiveToken = sgToken || process.env.SOURCEGRAPH_TOKEN;
+        if (!effectiveUrl || !effectiveToken) {
+            return {
+                content: [{
+                        type: "text",
+                        text: "Error: Sourcegraph URL or token not configured. Please set SOURCEGRAPH_URL and SOURCEGRAPH_TOKEN environment variables."
+                    }],
+                isError: true
+            };
+        }
+        try {
+            // Get the definition query
+            const graphqlQuery = (0, code_intelligence_1.getDefinitionQuery)();
+            // Execute the query
+            const response = await (0, code_intelligence_1.executeSourcegraphQuery)(graphqlQuery, { repository, path, line, character }, { url: effectiveUrl, token: effectiveToken });
+            if (response.errors) {
+                return {
+                    content: [{
+                            type: "text",
+                            text: `Sourcegraph API Error: ${JSON.stringify(response.errors)}`
+                        }],
+                    isError: true
+                };
+            }
+            // Format the results
+            const formattedResults = (0, code_intelligence_1.formatDefinitionResults)(response.data);
+            return {
+                content: [{
+                        type: "text",
+                        text: formattedResults
+                    }]
+            };
+        }
+        catch (error) {
+            return {
+                content: [{
+                        type: "text",
+                        text: `Error finding definition: ${error.message || 'Unknown error'}`
+                    }],
+                isError: true
+            };
+        }
+    });
+    // Code Intelligence: find-references tool
+    server.tool("find-references", "Find all references to a symbol across repositories.\n\n" +
+        "WHEN TO USE THIS TOOL:\n" +
+        "- When you need to find all places where a function, variable, or class is used\n" +
+        "- When analyzing the impact of potential code changes or refactoring\n" +
+        "- When understanding dependencies and usage patterns in a codebase\n" +
+        "- When tracing execution paths through a complex system\n" +
+        "- When determining if a piece of code is still in use before removing it\n\n" +
+        "PARAMETER USAGE:\n" +
+        "- repository: The full repository name (e.g., 'github.com/owner/repo')\n" +
+        "- path: The file path where the symbol is defined or used (e.g., 'src/main.js')\n" +
+        "- line: The zero-indexed line number where the symbol appears\n" +
+        "- character: The zero-indexed character position of the symbol on that line\n" +
+        "- limit: Maximum number of references to return (default: 50)\n\n" +
+        "IMPORTANT NOTES:\n" +
+        "- Requires LSIF data to be available in Sourcegraph (precise code intelligence)\n" +
+        "- For accurate results, the repository must be properly indexed in Sourcegraph\n" +
+        "- Cross-repository references require proper indexing of all relevant repositories\n" +
+        "- Line and character positions are zero-indexed (unlike editors which often use 1-indexed)\n\n" +
+        "EXAMPLES:\n" +
+        "- Find references to a function: { repository: 'github.com/golang/go', path: 'src/net/http/server.go', line: 142, character: 15, limit: 100 }\n" +
+        "- Analyze usage of a class: { repository: 'github.com/typescript-eslint/typescript-eslint', path: 'packages/eslint-plugin/src/rules/indent.ts', line: 24, character: 10 }\n\n" +
+        "The results will show all files and locations where the symbol is referenced, organized by repository and file.", {
+        repository: zod_1.z.string().describe("The repository name (e.g. github.com/owner/repo)"),
+        path: zod_1.z.string().describe("The file path within the repository"),
+        line: zod_1.z.number().describe("Zero-indexed line number of the symbol"),
+        character: zod_1.z.number().describe("Zero-indexed character position of the symbol"),
+        limit: zod_1.z.number().default(50).describe("Maximum number of references to return")
+    }, async ({ repository, path, line, character, limit }) => {
+        // Validate Sourcegraph credentials
+        const effectiveUrl = sgUrl || process.env.SOURCEGRAPH_URL;
+        const effectiveToken = sgToken || process.env.SOURCEGRAPH_TOKEN;
+        if (!effectiveUrl || !effectiveToken) {
+            return {
+                content: [{
+                        type: "text",
+                        text: "Error: Sourcegraph URL or token not configured. Please set SOURCEGRAPH_URL and SOURCEGRAPH_TOKEN environment variables."
+                    }],
+                isError: true
+            };
+        }
+        try {
+            // Get the references query
+            const graphqlQuery = (0, code_intelligence_1.getReferencesQuery)();
+            // Execute the query
+            const response = await (0, code_intelligence_1.executeSourcegraphQuery)(graphqlQuery, { repository, path, line, character, limit }, { url: effectiveUrl, token: effectiveToken });
+            if (response.errors) {
+                return {
+                    content: [{
+                            type: "text",
+                            text: `Sourcegraph API Error: ${JSON.stringify(response.errors)}`
+                        }],
+                    isError: true
+                };
+            }
+            // Format the results
+            const formattedResults = (0, code_intelligence_1.formatReferencesResults)(response.data, { repository, path, line, character });
+            return {
+                content: [{
+                        type: "text",
+                        text: formattedResults
+                    }]
+            };
+        }
+        catch (error) {
+            return {
+                content: [{
+                        type: "text",
+                        text: `Error finding references: ${error.message || 'Unknown error'}`
+                    }],
+                isError: true
+            };
+        }
+    });
+    // Code Intelligence: find-implementations tool
+    server.tool("find-implementations", "Find implementations of interfaces, classes, or methods across repositories.\n\n" +
+        "WHEN TO USE THIS TOOL:\n" +
+        "- When you need to find all concrete implementations of an interface or abstract class\n" +
+        "- When exploring how different components implement a common contract\n" +
+        "- When understanding the variety of implementations for a specific method\n" +
+        "- When analyzing polymorphic behavior across a codebase\n" +
+        "- When evaluating the impact of interface changes on implementing classes\n\n" +
+        "PARAMETER USAGE:\n" +
+        "- repository: The full repository name (e.g., 'github.com/owner/repo')\n" +
+        "- path: The file path where the interface or abstract class is defined (e.g., 'src/interfaces.ts')\n" +
+        "- line: The zero-indexed line number where the interface appears\n" +
+        "- character: The zero-indexed character position of the interface on that line\n" +
+        "- limit: Maximum number of implementations to return (default: 50)\n\n" +
+        "IMPORTANT NOTES:\n" +
+        "- Requires LSIF data to be available in Sourcegraph (precise code intelligence)\n" +
+        "- This feature is most effective in strongly-typed languages (Java, C#, TypeScript, Go, etc.)\n" +
+        "- For accurate results, the repository must be properly indexed in Sourcegraph\n" +
+        "- Cross-repository implementations require proper indexing of all relevant repositories\n" +
+        "- Line and character positions are zero-indexed (unlike editors which often use 1-indexed)\n\n" +
+        "EXAMPLES:\n" +
+        "- Find implementations of an interface: { repository: 'github.com/golang/go', path: 'src/io/io.go', line: 78, character: 6, limit: 100 }\n" +
+        "- Discover classes implementing an interface: { repository: 'github.com/spring-projects/spring-framework', path: 'spring-core/src/main/java/org/springframework/core/io/Resource.java', line: 24, character: 17 }\n\n" +
+        "The results will show all files and locations where the interface or abstract class is implemented, organized by repository and file.", {
+        repository: zod_1.z.string().describe("The repository name (e.g. github.com/owner/repo)"),
+        path: zod_1.z.string().describe("The file path within the repository"),
+        line: zod_1.z.number().describe("Zero-indexed line number of the interface/abstract class"),
+        character: zod_1.z.number().describe("Zero-indexed character position of the interface/abstract class"),
+        limit: zod_1.z.number().default(50).describe("Maximum number of implementations to return")
+    }, async ({ repository, path, line, character, limit }) => {
+        // Validate Sourcegraph credentials
+        const effectiveUrl = sgUrl || process.env.SOURCEGRAPH_URL;
+        const effectiveToken = sgToken || process.env.SOURCEGRAPH_TOKEN;
+        if (!effectiveUrl || !effectiveToken) {
+            return {
+                content: [{
+                        type: "text",
+                        text: "Error: Sourcegraph URL or token not configured. Please set SOURCEGRAPH_URL and SOURCEGRAPH_TOKEN environment variables."
+                    }],
+                isError: true
+            };
+        }
+        try {
+            // Get the implementations query
+            const graphqlQuery = (0, code_intelligence_1.getImplementationsQuery)();
+            // Execute the query
+            const response = await (0, code_intelligence_1.executeSourcegraphQuery)(graphqlQuery, { repository, path, line, character, limit }, { url: effectiveUrl, token: effectiveToken });
+            if (response.errors) {
+                return {
+                    content: [{
+                            type: "text",
+                            text: `Sourcegraph API Error: ${JSON.stringify(response.errors)}`
+                        }],
+                    isError: true
+                };
+            }
+            // Format the results
+            const formattedResults = (0, code_intelligence_1.formatImplementationsResults)(response.data, { repository, path, line, character });
+            return {
+                content: [{
+                        type: "text",
+                        text: formattedResults
+                    }]
+            };
+        }
+        catch (error) {
+            return {
+                content: [{
+                        type: "text",
+                        text: `Error finding implementations: ${error.message || 'Unknown error'}`
+                    }],
+                isError: true
+            };
+        }
     });
     return server;
 }
