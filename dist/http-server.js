@@ -7,9 +7,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const sse_js_1 = require("@modelcontextprotocol/sdk/server/sse.js");
 const mcp_server_1 = require("./mcp-server");
-const dotenv_1 = __importDefault(require("dotenv"));
+const dotenv_2 = __importDefault(require("dotenv"));
 // Load environment variables
-dotenv_1.default.config();
+dotenv_2.default.config();
 async function main() {
     console.log('Starting Sourcegraph MCP Server...');
     console.log(`SOURCEGRAPH_URL: ${process.env.SOURCEGRAPH_URL ? 'Set' : 'NOT SET'}`);

@@ -9,9 +9,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getDiffSearchQuery = exports.getCommitSearchQuery = exports.getFileSearchQuery = exports.executeSourcegraphSearch = exports.searchSourcegraph = void 0;
 const axios_1 = __importDefault(require("axios"));
-const dotenv_1 = __importDefault(require("dotenv"));
+const dotenv_2 = __importDefault(require("dotenv"));
 // Load environment variables
-dotenv_1.default.config();
+dotenv_2.default.config();
 // Get Sourcegraph configuration from environment
 const getSourcegraphConfig = () => {
     const url = process.env.SOURCEGRAPH_URL;

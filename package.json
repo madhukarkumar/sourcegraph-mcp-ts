@@ -1,14 +1,18 @@
 {
+  "description": "Sourcegraph MCP Server with natural language search, code pattern research, and commit analysis",
+  "keywords": ["sourcegraph", "mcp", "search", "code-search", "ai", "llm", "deep-research"],
+  "repository": "github:madhukarkumar/sg-ts-mcp-server",
+  "author": "Madhukar Kumar",
+  "license": "MIT",
   "name": "sourcegraph-mcp-server",
-  "version": "1.3.0",
+  "version": "1.5.0",
   "scripts": {
-    "build": "tsc",
+    "build": "node scripts/transpile.js",
+    "build:ts": "tsc",
     "start": "node dist/index.js",
     "start:mcp": "node dist/http-server.js",
     "start:stdio": "node dist/stdio-server.js",
-    "start:dev": "ts-node src/http-server.ts",
-    "debug-server": "node scripts/debug-server.js",
-    "test-search": "node scripts/test-search.js"
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.9.0",
@@ -24,5 +28,14 @@
   },
   "bin": {
     "sourcegraph-mcp-server": "dist/stdio-server.js"
-  }
+  },
+  "files": [
+    "dist/**/*",
+    "!dist/**/*.map",
+    ".env.example",
+    "DEBUGGING.md",
+    "FIXED_MCP_INSPECTOR.md",
+    "README.md",
+    "STDIO_GUIDE.md"
+  ]
 }

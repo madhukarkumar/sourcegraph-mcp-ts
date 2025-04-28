@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const llm_1 = require("../services/llm");
-const sourcegraph_1 = require("../services/sourcegraph");
+const sourcegraph_2 = require("../services/sourcegraph");
 const router = (0, express_1.Router)();
 /**
  * Helper function that either calls LLM or uses direct query.
@@ -41,7 +41,7 @@ router.post('/code', async (req, res) => {
         }
         // Build or convert query for searching code (type:file)
         const finalQuery = await buildFinalQuery(query, directQuery, 'file');
-        const results = await (0, sourcegraph_1.searchSourcegraph)(finalQuery);
+        const results = await (0, sourcegraph_2.searchSourcegraph)(finalQuery);
         return res.json({ finalQuery, results });
     }
     catch (err) {
@@ -61,7 +61,7 @@ router.post('/commits', async (req, res) => {
         }
         // Build or convert query for searching commits (type:commit)
         const finalQuery = await buildFinalQuery(query, directQuery, 'commit');
-        const results = await (0, sourcegraph_1.searchSourcegraph)(finalQuery);
+        const results = await (0, sourcegraph_2.searchSourcegraph)(finalQuery);
         return res.json({ finalQuery, results });
     }
     catch (err) {
@@ -81,7 +81,7 @@ router.post('/diffs', async (req, res) => {
         }
         // Build or convert query for searching diffs (type:diff)
         const finalQuery = await buildFinalQuery(query, directQuery, 'diff');
-        const results = await (0, sourcegraph_1.searchSourcegraph)(finalQuery);
+        const results = await (0, sourcegraph_2.searchSourcegraph)(finalQuery);
         return res.json({ finalQuery, results });
     }
     catch (err) {

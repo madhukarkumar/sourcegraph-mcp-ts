@@ -396,51 +396,39 @@ function createServer() {
     });
     // Add a debug tool to list available tools and methods
     server.tool("debug", "Lists all available tools and methods in the MCP server. Use this to discover capabilities.\n\n    WHEN TO USE THIS TOOL:\n    - When you need to see what tools are available in the server\n    - When you want to check which methods are supported\n    - When debugging or exploring the MCP server capabilities\n    - When you're unsure what functionality is available\n\n    The output includes:\n    - All registered tools with their names\n    - Available resources like URLs\n    - Registered prompts\n    - Supported MCP methods\n    \n    No parameters are required. Simply call the tool to get a complete listing.", {}, async () => {
-        try {
-            const toolsList = [
-                "echo",
-                "search-code",
-                "search-commits",
-                "search-diffs",
-                "search-github-repos",
-                "natural-search",
-                "test-nl-search",
-                "test-connection",
-                "nl-search-help",
-                "debug",
-                "deep-code-researcher"
-            ];
-            const resourcesList = [
-                "hello://sourcegraph",
-                "greeting://{name}"
-            ];
-            const promptsList = [
-                "sourcegraph-assistant"
-            ];
-            const methodsList = ["tools/invoke", "mcp/capabilities", "debug/info"];
-            const info = {
-                tools: toolsList,
-                resources: resourcesList,
-                prompts: promptsList,
-                methods: methodsList
-            };
-            return {
-                content: [{
-                        type: "text",
-                        text: JSON.stringify(info, null, 2)
-                    }]
-            };
-        }
-        catch (error) {
-            console.error("Error in debug tool:", error);
-            return {
-                content: [{
-                        type: "text",
-                        text: "Error generating debug information"
-                    }],
-                isError: true
-            };
-        }
+        const toolsList = [
+            "echo",
+            "search-code",
+            "search-commits",
+            "search-diffs",
+            "search-github-repos",
+            "natural-search",
+            "test-nl-search",
+            "test-connection",
+            "nl-search-help",
+            "debug",
+            "deep-code-researcher"
+        ];
+        const resourcesList = [
+            "hello://sourcegraph",
+            "greeting://{name}"
+        ];
+        const promptsList = [
+            "sourcegraph-assistant"
+        ];
+        const methodsList = ["tools/invoke", "mcp/capabilities", "debug/info"];
+        const info = {
+            tools: toolsList,
+            resources: resourcesList,
+            prompts: promptsList,
+            methods: methodsList
+        };
+        return {
+            content: [{
+                    type: "text",
+                    text: JSON.stringify(info, null, 2)
+                }]
+        };
     });
     // Add invoke method to the server for direct tool invocation
     server.invoke = async (toolName, params) => {
@@ -451,8 +439,6 @@ function createServer() {
     };
     // Add test tools for easier debugging and validation
     (0, test_tools_1.addTestTools)(server);
-    // Import the deep research service
-    const deep_research_1 = require("./services/deep-research");
     // Deep code researcher tool for advanced code analysis
     server.tool("deep-code-researcher", "Conduct deep research on code patterns and architecture across repositories with advanced analysis capabilities.\n\n" +
         "WHEN TO USE THIS TOOL:\n" +
@@ -460,32 +446,15 @@ function createServer() {
         "- When searching for patterns across multiple repositories\n" +
         "- When analyzing code architecture and dependencies\n" +
         "- When you need to understand implementation patterns for specific functionality", {
-        query: zod_1.z.string().describe("The research query or code pattern to analyze"),
-        repo: zod_1.z.string().optional().describe("Optional repository filter (e.g., 'github.com/owner/repo')"),
-        language: zod_1.z.string().optional().describe("Optional language filter (e.g., 'javascript', 'go', 'python')"),
-        limit: zod_1.z.number().optional().describe("Maximum number of results to return (default: 20)")
-    }, async ({ query, repo, language, limit = 20 }) => {
-        // Validate Sourcegraph credentials
-        const effectiveUrl = sgUrl || process.env.SOURCEGRAPH_URL;
-        const effectiveToken = sgToken || process.env.SOURCEGRAPH_TOKEN;
-        if (!effectiveUrl || !effectiveToken) {
-            return {
-                content: [{
-                        type: "text",
-                        text: "Error: Sourcegraph URL or token not configured. Please set SOURCEGRAPH_URL and SOURCEGRAPH_TOKEN environment variables."
-                    }],
-                isError: true
-            };
-        }
-        // Call the dedicated deep research service
-        return await (0, deep_research_1.performDeepCodeResearch)({
-            query,
-            repo,
-            language,
-            limit,
-            url: effectiveUrl,
-            token: effectiveToken
-        });
+        query: zod_1.z.string().describe("The research query or code pattern to analyze")
+    }, async ({ query }) => {
+        // Placeholder for implementation
+        return {
+            content: [{
+                    type: "text",
+                    text: `Research query '${query}' processed. Implementation pending.`
+                }]
+        };
     });
     return server;
 }

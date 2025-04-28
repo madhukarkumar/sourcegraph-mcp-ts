@@ -442,51 +442,33 @@ function createServer() {
             };
         }
     });
-    // Add invoke method to the server for direct tool invocation
-    server.invoke = async (toolName, params) => {
-        if (toolName in toolImplementations) {
-            return await toolImplementations[toolName](params);
-        }
-        throw new Error(`Tool '${toolName}' not found`);
-    };
-    // Add test tools for easier debugging and validation
-    (0, test_tools_1.addTestTools)(server);
-    // Import the deep research service
-    const deep_research_1 = require("./services/deep-research");
-    // Deep code researcher tool for advanced code analysis
-    server.tool("deep-code-researcher", "Conduct deep research on code patterns and architecture across repositories with advanced analysis capabilities.\n\n" +
-        "WHEN TO USE THIS TOOL:\n" +
-        "- When you need comprehensive understanding of complex codebases\n" +
-        "- When searching for patterns across multiple repositories\n" +
-        "- When analyzing code architecture and dependencies\n" +
-        "- When you need to understand implementation patterns for specific functionality", {
-        query: zod_1.z.string().describe("The research query or code pattern to analyze"),
-        repo: zod_1.z.string().optional().describe("Optional repository filter (e.g., 'github.com/owner/repo')"),
-        language: zod_1.z.string().optional().describe("Optional language filter (e.g., 'javascript', 'go', 'python')"),
-        limit: zod_1.z.number().optional().describe("Maximum number of results to return (default: 20)")
-    }, async ({ query, repo, language, limit = 20 }) => {
-        // Validate Sourcegraph credentials
-        const effectiveUrl = sgUrl || process.env.SOURCEGRAPH_URL;
-        const effectiveToken = sgToken || process.env.SOURCEGRAPH_TOKEN;
-        if (!effectiveUrl || !effectiveToken) {
-            return {
-                content: [{
-                        type: "text",
-                        text: "Error: Sourcegraph URL or token not configured. Please set SOURCEGRAPH_URL and SOURCEGRAPH_TOKEN environment variables."
-                    }],
-                isError: true
-            };
-        }
-        // Call the dedicated deep research service
-        return await (0, deep_research_1.performDeepCodeResearch)({
-            query,
-            repo,
-            language,
-            limit,
-            url: effectiveUrl,
-            token: effectiveToken
-        });
-    });
-    return server;
 }
+;
+// Add invoke method to the server for direct tool invocation
+server.invoke = async (toolName, params) => {
+    if (toolName in toolImplementations) {
+        return await toolImplementations[toolName](params);
+    }
+    throw new Error(`Tool '${toolName}' not found`);
+};
+// Add test tools for easier debugging and validation
+(0, test_tools_1.addTestTools)(server);
+// Deep code researcher tool for advanced code analysis
+server.tool("deep-code-researcher", "Conduct deep research on code patterns and architecture across repositories with advanced analysis capabilities.\n\n" +
+    "WHEN TO USE THIS TOOL:\n" +
+    "- When you need comprehensive understanding of complex codebases\n" +
+    "- When searching for patterns across multiple repositories\n" +
+    "- When analyzing code architecture and dependencies\n" +
+    "- When you need to understand implementation patterns for specific functionality", {
+    query: zod_1.z.string().describe("The research query or code pattern to analyze")
+}, async ({ query }) => {
+    // Placeholder for implementation
+    return {
+        content: [{
+                type: "text",
+                text: `Research query '${query}' processed. Implementation pending.`
+            }]
+    };
+});
+return server;
 exports.createServer = createServer;

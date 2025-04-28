@@ -1,172 +1,132 @@
-# Sourcegraph MCP Server with Natural Language Search
+# Sourcegraph MCP Server
 
-## Overview
-
-A Model Context Protocol (MCP) server that allows AI assistants to search code repositories using natural language (plain English) queries through the Sourcegraph API.
+A Model Context Protocol (MCP) server that allows AI assistants to search code repositories using natural language queries through the Sourcegraph API. The server also provides advanced code pattern research capabilities.
 
 ## Key Features
 
-- **Natural Language Code Search**: Search using plain English queries with LLM-powered translation
+- **Natural Language Code Search**: Search using plain English queries
 - **Code Search**: Search for code across Sourcegraph repositories
 - **Commit Search**: Find commits with various filters
 - **Diff Search**: Find code changes/PRs
 - **GitHub-specific Search**: Search in specific GitHub repositories
-- **LLM-Powered Query Translation**: Uses OpenAI or Anthropic to translate natural language to Sourcegraph syntax
+- **Deep Code Research**: Analyze code patterns and architecture across repositories
 
-## How to Search with Natural Language
+## Quick Start
 
-You can search code using plain English in several ways:
-
-### Using MCP Tools (for AI assistants)
-
-1. Connect to the MCP server at http://localhost:3002
-2. Use the `natural-search` tool with a query parameter:
-   ```json
-   {
-     "name": "natural-search",
-     "params": {
-       "query": "find all files that have stdio related code"
-     }
-   }
-   ```
-
-### Using the Debug Server (for testing)
-
-1. Start the debug server: `npm run debug-server`
-2. Connect MCP Inspector to http://localhost:3003
-3. Try the `test-nl-search` tool with a natural language query
-
-### Using the Direct API (for applications)
+### Installation & Usage
 
 ```bash
-curl -X POST http://localhost:3001/api/search \
-  -H "Content-Type: application/json" \
-  -d '{"query":"find all files that have stdio related code", "type":"natural"}'
+# Run directly with npx (simplest way)
+npx sourcegraph-mcp-server
+
+# Or install globally
+npm install -g sourcegraph-mcp-server
+sourcegraph-mcp-server
 ```
 
-## Natural Language Query Examples
+### Configuration
 
-- **Code search**: "Find all files that have stdio related code"
-- **Feature search**: "Show me authentication code in the frontend"
-- **Author search**: "Find commits by Jane from last week"
-- **Date-based search**: "What changes were made to the API in March?"
-- **Repository-specific**: "Look for database files in the sourcegraph repository"
+Create a `.env` file with your Sourcegraph credentials before running:
 
-## Installation
+```
+SOURCEGRAPH_URL=https://your-sourcegraph-instance.com
+SOURCEGRAPH_TOKEN=your_api_token
+```
+
+## Using with MCP-Capable AI Assistants
+
+### Claude Desktop App
+
+1. In Claude Desktop, go to Settings > MCP Servers
+2. Add MCP Server
+   - For STDIO: Process: `npx -y sourcegraph-mcp-server`
+   - For HTTP: URL: `http://localhost:3002`
+3. Start using tools by typing "/tool" in Claude
+
+### MCP Inspector (for testing)
+
+npx @modelcontextprotocol/inspector node dist/stdio-server.js  
+
+## Available Tools
+
+### Basic Tools
+
+- `search-code`: Search code with Sourcegraph query syntax
+- `search-commits`: Find commits with filters
+- `search-diffs`: Find code changes/PRs
+- `search-github-repos`: Search in specific GitHub repositories
+- `natural-search`: Search using natural language
+- `echo`: Simple test tool
+- `debug`: Show available tools
+
+### Advanced Tools
+
+- `deep-code-researcher`: Conduct deep research on code patterns and architecture
+
+## Deep Code Researcher Tool
+
+The `deep-code-researcher` tool provides comprehensive analysis of code patterns:
+
+```json
+{
+  "name": "deep-code-researcher",
+  "parameters": {
+    "query": "authentication",
+    "repo": "supabase/supabase",   // optional: specific repository
+    "language": "typescript",     // optional: filter by language
+    "limit": 30                   // optional: result limit (default: 20)
+  }
+}
+```
+
+This tool provides:
+- Code findings with matching files and snippets
+- Code pattern insights including key files and directories
+- File type distribution analysis
+- Development insights from related commits
+- Contributor statistics and development timeline
+
+## Natural Language Search
+
+You can search code using natural language queries like:
+
+- "Find all files that implement authentication"
+- "Show me the error handling in the API code"
+- "Find code that processes payment webhooks"
+- "Look for filesystem operations in the server code"
+
+The `natural-search` tool automatically converts these queries to Sourcegraph syntax.
+
+## Troubleshooting
+
+If you encounter issues:
+
+1. **Environment Variables**: Ensure SOURCEGRAPH_URL and SOURCEGRAPH_TOKEN are correctly set
+2. **Connectivity**: Verify your Sourcegraph instance is accessible
+3. **Tool Errors**: Use the `debug` tool to verify available tools
+
+For detailed troubleshooting help, see the [DEBUGGING.md](./DEBUGGING.md) file.
+
+## Running Manually (for Development)
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-repo/sourcegraph-mcp-server.git
-cd sourcegraph-mcp-server
+git clone https://github.com/madhukarkumar/sg-ts-mcp-server.git
+cd sg-ts-mcp-server
 
 # Install dependencies
 npm install
 
 # Build the project
 npm run build
-```
 
-## Configuration
-
-Create a `.env` file in the root directory with the following variables:
-
-```
-SOURCEGRAPH_URL=https://your-sourcegraph-instance.com
-SOURCEGRAPH_TOKEN=your_api_token
-PORT=3001
-MCP_PORT=3002
-
-# LLM configuration for natural language processing
-LLM_PROVIDER=openai       # Can be 'openai' or 'anthropic'
-OPENAI_API_KEY=your_openai_api_key
-OPENAI_MODEL=gpt-4o      # Default model to use, gpt-3.5-turbo also works
-# ANTHROPIC_API_KEY=your_anthropic_key  # For using Claude instead
-# ANTHROPIC_MODEL=claude-2   # Default Anthropic model
-```
-
-## Running the Server
-
-```bash
-# Start the API server (for direct API access)
-npm start
-
-# Start the MCP server (for integration with AI assistants)
+# Start the HTTP MCP server
 npm run start:mcp
 
-# Start the debug server (for MCP protocol testing)
-npm run debug-server
-
-# Test natural language search functionality
-npm run test-search "find authentication code in React components"
+# Or start the STDIO server
+npm run start:stdio
 ```
 
-## Testing with MCP Inspector
+## License
 
-To test the server using the [MCP Inspector](https://github.com/anthropics/mcp-inspector/):
-
-1. First, start the debug server: `npm run debug-server`
-2. Open the MCP Inspector and connect to: `http://localhost:3003`
-3. Try the tools in this order:
-
-   * **`echo`** with message "Hello World" (to test basic connectivity)
-   * **`test-nl-search`** with "find stdio code" (to test language parsing)
-   * **`test-connection`** (to verify Sourcegraph connection)
-
-4. For the full MCP server, connect to http://localhost:3002 and use:
-   * **`natural-search`** with your plain English query
-
-## API Endpoints
-
-The server provides direct API endpoints:
-
-- **`POST /api/search`**: Natural language search
-  ```json
-  {
-    "query": "find stdio related code",
-    "type": "natural"
-  }
-  ```
-
-- **`POST /search/code`**: Search for code (with auto-conversion from natural language)
-  ```json
-  {
-    "query": "find stdio related code",
-    "directQuery": false
-  }
-  ```
-
-## Available MCP Tools
-
-- **`natural-search`**: Search using natural language
-- **`search-code`**: Search for code with direct query
-- **`search-commits`**: Search for commits
-- **`search-diffs`**: Search for code changes
-- **`search-github-repos`**: Search in specific GitHub repositories
-- **`test-nl-search`**: Test natural language parsing
-- **`test-connection`**: Test Sourcegraph connection
-- **`nl-search-help`**: Get help for natural language search
-- **`echo`**: Simple echo tool for testing
-- **`debug`**: Show available tools
-
-## Debugging and Troubleshooting
-
-See [FIXED_MCP_INSPECTOR.md](./FIXED_MCP_INSPECTOR.md) for detailed troubleshooting guidelines for MCP connection issues.
-
-- **API Connection**: Test basic Sourcegraph connectivity with the `test-connection` tool
-- **MCP Issues**: Run the debug server for clear logging of all requests and responses
-- **Query Conversion**: Use `test-nl-search` to see how queries are interpreted
-
-### Testing with mcp-inspector
-
--- ``` mcp-inspectpor   ```
-
-Transport Type
-
--- STDIO
-
-Command
--- ```node```
-
-Arguments
-
--- ```your-path/dist/stdio-server.js```
+MIT

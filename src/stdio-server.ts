@@ -34,12 +34,12 @@ async function main() {
     console.error('- Tools available: echo, search-code, search-commits, search-diffs, search-github-repos, debug');
   } catch (error) {
     // Log error to stderr
-    console.error('Failed to start MCP server:', error instanceof Error ? error.message : error);
+    console.error(`Failed to start MCP server: ${error instanceof Error ? error.message : String(error)}`);
     process.exit(1);
   }
 }
 
 main().catch((error) => {
-  console.error('Fatal error in main():', error instanceof Error ? error.message : error);
+  console.error(`Fatal error in main(): ${error instanceof Error ? error.message : String(error)}`);
   process.exit(1);
 });

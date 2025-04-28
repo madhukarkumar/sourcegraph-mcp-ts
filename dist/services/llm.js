@@ -9,9 +9,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.convertQueryToSourcegraphSyntax = void 0;
 const axios_1 = __importDefault(require("axios"));
-const dotenv_1 = __importDefault(require("dotenv"));
+const dotenv_2 = __importDefault(require("dotenv"));
 // Load environment variables
-dotenv_1.default.config();
+dotenv_2.default.config();
 // LLM configuration from environment
 const LLM_PROVIDER = process.env.LLM_PROVIDER || 'openai';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
