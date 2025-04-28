@@ -57,6 +57,9 @@ npx @modelcontextprotocol/inspector node dist/stdio-server.js
 - `search-diffs`: Find code changes/PRs
 - `search-github-repos`: Search in specific GitHub repositories
 - `natural-search`: Search using natural language
+- `nl-search-help`: Get help on natural language search capabilities
+- `test-nl-search`: Test natural language search with debugging information
+- `test-connection`: Test if the server can connect to Sourcegraph API
 - `echo`: Simple test tool
 - `debug`: Show available tools
 
@@ -67,6 +70,10 @@ npx @modelcontextprotocol/inspector node dist/stdio-server.js
 - `firecrawl_search`: Search the web and extract results
 - `firecrawl_extract`: Extract structured data from web content
 - `firecrawl_deep_research`: Conduct deep web research with AI analysis
+- `firecrawl_map`: Discover URLs from a starting point
+- `firecrawl_crawl`: Crawl multiple pages from a URL
+- `firecrawl_check_crawl_status`: Check status of a crawl job
+- `firecrawl_generate_llmstxt`: Generate standardized LLMs.txt file for a website
 
 ## Deep Code Researcher Tool
 
@@ -125,14 +132,19 @@ For detailed troubleshooting help, see the [DEBUGGING.md](./DEBUGGING.md) file.
 
 ```
 .
-├── src/              - TypeScript source files
-│   ├── index.ts     - Main Express server entry point
-│   ├── mcp-server.ts - Model Context Protocol implementation
-│   ├── http-server.ts - HTTP transport for MCP
-│   └── stdio-server.ts - STDIO transport for MCP
-├── scripts/         - Utility scripts for testing and development
-├── dist/            - Compiled JavaScript output
-└── archive/         - Archived files for reference
+├── src/                     - TypeScript source files
+│   ├── index.ts             - Main Express server entry point
+│   ├── mcp-server.ts        - Model Context Protocol implementation  
+│   ├── mcp-server-debug.ts  - Debug version of MCP server
+│   ├── mcp-server-connect.ts - Connection testing implementation
+│   ├── http-server.ts       - HTTP transport for MCP
+│   └── stdio-server.ts      - STDIO transport for MCP
+├── scripts/                 - Utility scripts for testing and development
+│   ├── debug-server.js      - Debug server utility
+│   └── test-search.js       - Test search functionality
+├── dist/                    - Compiled JavaScript output
+├── docs/                    - Documentation files
+└── .env.example             - Example environment configuration
 ```
 
 ## Running Manually (for Development)
