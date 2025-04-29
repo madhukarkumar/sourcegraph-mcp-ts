@@ -10,7 +10,6 @@ A Model Context Protocol (MCP) server that allows AI assistants to search code r
 - **Diff Search**: Find code changes/PRs
 - **GitHub-specific Search**: Search in specific GitHub repositories
 - **Deep Code Research**: Analyze code patterns and architecture across repositories
-- **Web Extraction**: Extract and analyze web content through FireCrawl integration
 
 ## Quick Start
 
@@ -50,73 +49,64 @@ npx @modelcontextprotocol/inspector node dist/stdio-server.js
 
 ## Available Tools
 
-### Basic Tools
+### Basic Search Tools
 
 - `search-code`: Search code with Sourcegraph query syntax
 - `search-commits`: Find commits with filters
 - `search-diffs`: Find code changes/PRs
 - `search-github-repos`: Search in specific GitHub repositories
-- `natural-search`: Search using natural language
-- `nl-search-help`: Get help on natural language search capabilities
-- `test-nl-search`: Test natural language search with debugging information
-- `test-connection`: Test if the server can connect to Sourcegraph API
+
+### Code Intelligence Tools
+
+- `get-definition`: Find the definition of a symbol in code
+- `get-references`: Find all references to a symbol
+- `get-implementations`: Find implementations of interfaces or methods
+- `get-hover-documentation`: Get documentation for a symbol
+- `get-document-symbols`: List all symbols in a file
+
+### Repository Tools
+
+- `get-file-content`: Get the content of a file from a repository
+- `get-file-blame`: Get git blame information for a file
+
+### Security Tools
+
+- `lookup-cve`: Search for CVEs affecting repositories or packages
+- `lookup-package-vulnerability`: Check packages for vulnerabilities
+- `search-exploits`: Find exploit code for known vulnerabilities
+- `find-vendor-advisory`: Find vendor security advisories
+
+### Utility Tools
+
+- `test-connection`: Test connection to Sourcegraph API
 - `echo`: Simple test tool
 - `debug`: Show available tools
 
-### Advanced Tools
+## Code Intelligence Features
 
-- `deep-code-researcher`: Conduct deep research on code patterns and architecture
-- `firecrawl_scrape`: Extract content from web pages
-- `firecrawl_search`: Search the web and extract results
-- `firecrawl_extract`: Extract structured data from web content
-- `firecrawl_deep_research`: Conduct deep web research with AI analysis
-- `firecrawl_map`: Discover URLs from a starting point
-- `firecrawl_crawl`: Crawl multiple pages from a URL
-- `firecrawl_check_crawl_status`: Check status of a crawl job
-- `firecrawl_generate_llmstxt`: Generate standardized LLMs.txt file for a website
+Sourcegraph MCP Server provides access to advanced code intelligence features:
 
-## Deep Code Researcher Tool
+- **Symbol Navigation**: Jump to definitions and find references across repositories
+- **Code Documentation**: Get hover documentation for functions, classes, and variables
+- **Repository Analysis**: Examine file content and git blame history
+- **Security Analysis**: Find vulnerabilities and security advisories
 
-The `deep-code-researcher` tool provides comprehensive analysis of code patterns:
+These tools help you understand codebases more efficiently by providing context about code symbols, relationships, and vulnerabilities.
 
-```json
-{
-  "name": "deep-code-researcher",
-  "parameters": {
-    "query": "authentication",
-    "repo": "supabase/supabase",   // optional: specific repository
-    "language": "typescript",     // optional: filter by language
-    "limit": 30                   // optional: result limit (default: 20)
-  }
-}
-```
+## Advanced Search Syntax
 
-This tool provides:
-- Code findings with matching files and snippets
-- Code pattern insights including key files and directories
-- File type distribution analysis
-- Development insights from related commits
-- Contributor statistics and development timeline
+Sourcegraph has a powerful search syntax you can use with the search tools:
 
-## Natural Language Search
+- **Repository filtering**: `repo:^github\.com/owner/repo$`
+- **Language filtering**: `lang:javascript`
+- **File path filtering**: `file:\.js$`
+- **Content filtering**: `content:"exact phrase"`
+- **Boolean operators**: `term1 AND term2`, `term1 OR term2`, `term1 NOT term2`
+- **Regular expressions**: `/pattern/`
+- **Commit search**: `type:commit message:"fix bug" author:username`
+- **Diff search**: `type:diff select:commit.diff.added term`
 
-You can search code using natural language queries like:
 
-- "Find all files that implement authentication"
-- "Show me the error handling in the API code"
-- "Find code that processes payment webhooks"
-- "Look for filesystem operations in the server code"
-
-The `natural-search` tool automatically converts these queries to Sourcegraph syntax.
-
-## Web Content Extraction (FireCrawl Integration)
-
-The server now includes FireCrawl integration for web content analysis:
-
-- **Content Scraping**: Extract text and structured data from web pages
-- **Web Search**: Search the web and analyze results
-- **Deep Research**: Conduct multi-step research using web content
-- **Structured Extraction**: Extract specific data points from web pages
 
 ## Troubleshooting
 

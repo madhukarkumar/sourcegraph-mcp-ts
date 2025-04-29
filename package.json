@@ -1,6 +1,6 @@
 {
   "name": "sourcegraph-mcp-server",
-  "version": "1.4.0",
+  "version": "1.4.2",
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
@@ -11,12 +11,19 @@
     "test-search": "node scripts/test-search.js"
   },
   "description": "A Model Context Protocol (MCP) server that connects AI assistants to Sourcegraph code search with natural language capabilities",
-  "keywords": ["sourcegraph", "mcp", "ai", "code-search", "claude", "assistant"],
+  "keywords": [
+    "sourcegraph",
+    "mcp",
+    "ai",
+    "code-search",
+    "claude",
+    "assistant"
+  ],
   "author": "Madhukar Kumar",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/madhukarkumar/sg-ts-mcp-server.git"
+    "url": "git+https://github.com/madhukarkumar/sg-ts-mcp-server.git"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.9.0",
